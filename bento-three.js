@@ -138,13 +138,14 @@ function surfaceFill() { return $('surfaceFill')?.value || 'chrome'; }
 function surfaceTexture() { return $('surfaceTexture')?.value || 'smooth'; }
 function hexOr(value, fallback) { return /^#[0-9a-f]{6}$/i.test(value || '') ? value : fallback; }
 
-/* 256 px knit tile: paired stitches with a soft crown and a dark valley. */
+/* 512 px knit tile: small paired stitches, so the weave reads as cloth at
+   any mark size instead of a grid of blobs. */
 function makeStippleTexture() {
-  const size = 256, c = document.createElement('canvas');
+  const size = 512, c = document.createElement('canvas');
   c.width = c.height = size;
   const x = c.getContext('2d');
   x.fillStyle = '#7d7d7d'; x.fillRect(0, 0, size, size);
-  const cell = 16;
+  const cell = 9;
   for (let row = 0; row < size / cell; row++) for (let col = 0; col < size / cell; col++) {
     const cx = col * cell + cell / 2, cy = row * cell + cell / 2;
     const lift = (row + col) % 2 ? 34 : -30;
@@ -154,17 +155,21 @@ function makeStippleTexture() {
     g.addColorStop(1, 'rgb(124,124,124)');
     x.fillStyle = g; x.beginPath(); x.arc(cx, cy, cell * .62, 0, Math.PI * 2); x.fill();
     /* A flat slub across the crown keeps the weave from reading as dots. */
-    x.fillStyle = 'rgba(255,255,255,.30)';
-    x.fillRect(cx - cell * .3, cy - 1, cell * .6, 2);
+    x.fillStyle = 'rgba(255,255,255,.26)';
+    x.fillRect(cx - cell * .3, cy - .5, cell * .6, 1);
   }
-  for (let i = 0; i < 5200; i++) {
+  for (let i = 0; i < 14000; i++) {
     const v = 90 + (Math.random() * 76 | 0);
     x.fillStyle = `rgba(${v},${v},${v},.5)`;
     x.fillRect(Math.random() * size | 0, Math.random() * size | 0, 1, 1);
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(7, 7); t.anisotropy = 4;
+  t.repeat.set(8, 8); t.anisotropy = 8;
+  /* No mip chain: a mipmapped micro-pattern averages to flat grey and the
+     bump disappears at preview size. */
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearFilter;
   return t;
 }
 
@@ -183,7 +188,9 @@ function makeGrainTexture() {
   x.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(4, 4); t.anisotropy = 4;
+  t.repeat.set(6, 6); t.anisotropy = 8;
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearFilter;
   return t;
 }
 
@@ -234,7 +241,7 @@ function makeMaterial() {
   if (texture === 'stipple') {
     stippleTexture = stippleTexture || makeStippleTexture();
     result.bumpMap = stippleTexture;
-    result.bumpScale = .55;
+    result.bumpScale = .7;
     /* A knit needs a broad, soft highlight, not a specular pin. */
     result.sheen = 1;
     result.sheenRoughness = .45;
@@ -242,7 +249,7 @@ function makeMaterial() {
   } else if (texture === 'grain') {
     grainTexture = grainTexture || makeGrainTexture();
     result.bumpMap = grainTexture;
-    result.bumpScale = .28;
+    result.bumpScale = .4;
   }
   result.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, liquidUniforms);

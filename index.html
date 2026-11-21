@@ -847,7 +847,7 @@
             </label>
             <div class="field">
               <span>Shader size</span>
-              <input id="shaderSize" type="range" min="50" max="200" value="100" aria-label="Shader scale" disabled />
+              <input id="shaderSize" type="range" min="25" max="200" step="5" value="100" aria-label="Shader scale" disabled />
               <b id="shaderSizeVal">100%</b>
             </div>
             <p class="note" id="shaderStatus">WebGL shaders run on the logo itself and bake into PNG and MP4.</p>
@@ -928,6 +928,54 @@
   const bgCanvas = $("bgCanvas");
   const bgCtx = bgCanvas.getContext("2d");
   const noiseCanvas = $("noiseCanvas");
+  const nctx = noiseCanvas.getContext("2d");
+  let grainTile = null;
+
+  /* 512 px micro-grain tile. A repeating pattern keeps every pixel 1:1 at any
+     frame size; the old 240 px canvas was stretched, which read as 4 px blocks. */
+  function buildGrainTile() {
+    const size = 512;
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = size;
+    const c = tile.getContext('2d');
+    const img = c.createImageData(size, size), d = img.data;
+    const rand = seeded(90210);
+    for (let i = 0; i < d.length; i += 4) {
+      /* two uniforms averaged: a tight bell, no banding, no clumps */
+      const v = Math.round(96 + (rand() + rand()) * 32);
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    c.putImageData(img, 0, 0);
+    grainTile = tile;
+  }
+
+  /* k = output pixels per CSS pixel, so the grain stays the same physical
+     size in the preview, the PNG and the MP4. */
+  function paintFilmGrain(ctx, w, h, amount, k, blend = 'source-over') {
+    if (!(amount > 0) || !w || !h) return false;
+    if (!grainTile) buildGrainTile();
+    ctx.save();
+    ctx.globalCompositeOperation = blend;
+    ctx.globalAlpha = Math.min(1, amount) * 0.45;
+    ctx.imageSmoothingEnabled = false;
+    ctx.scale(Math.max(0.5, k), Math.max(0.5, k));
+    ctx.fillStyle = ctx.createPattern(grainTile, 'repeat');
+    ctx.fillRect(0, 0, w / k, h / k);
+    ctx.restore();
+    return true;
+  }
+
+  function paintGrainPreview() {
+    const w = frame.clientWidth, h = frame.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (noiseCanvas.width !== pw || noiseCanvas.height !== ph) { noiseCanvas.width = pw; noiseCanvas.height = ph; }
+    nctx.setTransform(1, 0, 0, 1, 0, 0);
+    nctx.clearRect(0, 0, pw, ph);
+    paintFilmGrain(nctx, pw, ph, Number(noiseSlider.value) / 100, dpr);
+  }
   const crtOverlay = $("crtOverlay");
   const scaleSlider = $("scaleSlider");
   const noiseSlider = $("noiseSlider");
@@ -973,7 +1021,7 @@
   function paintBgNoise(ctx, w, h, amount) {
     if (amount <= 0) return;
     if (!bgNoiseTile) buildBgNoiseTile();
-    const cell = Math.max(48, Math.round(w / 3));
+    const k = Math.max(1, w / (frame.clientWidth || w));
     /* A wash needs the opposite blend on each ground: lighten a dark field,
        darken a light one, so the same control reads on both. */
     const field = [bgColor1.value, bgColor2.value, bgColor3.value]
@@ -984,9 +1032,13 @@
       }, 0) / 3;
     ctx.save();
     ctx.globalCompositeOperation = field > 0.5 ? 'multiply' : 'screen';
-    ctx.globalAlpha = (amount / 100) * 0.42;
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(bgNoiseTile, 0, 0, w, h);
+    ctx.globalAlpha = (amount / 100) * 0.5;
+    /* Tile at design scale, so the wash stays grain in the preview and in a
+       4x export instead of becoming blurred blocks. */
+    ctx.imageSmoothingEnabled = false;
+    ctx.scale(k, k);
+    ctx.fillStyle = ctx.createPattern(bgNoiseTile, 'repeat');
+    ctx.fillRect(0, 0, w / k, h / k);
     ctx.restore();
   }
 
@@ -1490,7 +1542,7 @@
       ['videoOpacity', 'videoOpacity', 0, 100, 100],
       ['glowPx', 'glowSlider', 4, 48, 7], ['grain', 'noiseSlider', 0, 100, 0],
       ['xeroxOpacity', 'paperOpacity', 0, 100, 70], ['inkBleed', 'inkBleed', 0, 100, 0],
-      ['gridStrength', 'gridStrength', 0, 100, 35], ['shaderSize', 'shaderSize', 50, 200, 100],
+      ['gridStrength', 'gridStrength', 0, 100, 35], ['shaderSize', 'shaderSize', 25, 200, 100],
     ]) {
       if (has(key)) { setRange(id, Math.max(min, Math.min(max, num(cfg[key], fallback)))); applied.push(key); }
     }
@@ -1795,7 +1847,6 @@
   $('halftoneBtn').addEventListener('click', () => setPrint(printMode === 'halftone' ? 'off' : 'halftone'));
 
   /* ---- loop ------------------------------------------------------------- */
-  const nctx = noiseCanvas.getContext("2d");
   function tick() {
     if (printMode !== 'off' && performance.now() - lastPrint > 70) {
       lastPrint = performance.now();
@@ -1836,16 +1887,7 @@
       }
     }
 
-    const amt = parseInt(noiseSlider.value) / 100;
     $("noiseVal").textContent = noiseSlider.value + "%";
-    if (noiseCanvas.width !== 240) { noiseCanvas.width = 240; noiseCanvas.height = 240; }
-    const imgData = nctx.createImageData(240, 240);
-    const d = imgData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const v = 96 + Math.random() * 64;
-      d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = amt * 115;
-    }
-    nctx.putImageData(imgData, 0, 0);
     requestAnimationFrame(tick);
   }
   tick();
@@ -2071,6 +2113,8 @@
     const layer = window.paperLayer;
     if (!layer) {
       $('shaderStatus').textContent = 'Paper shaders are still loading. Try again in a moment.';
+      /* Keep the control on the mode that is actually running. */
+      shaderSelect.value = shaderMode;
       return;
     }
     shaderMode = await layer.setMode(next);
@@ -2138,6 +2182,8 @@
   function drawShaderMark(ctx, w, h) {
     const source = window.paperLayer?.canvas;
     if (!source) return false;
+    /* Never bake before the mask is decoded; fall back to the plain mark. */
+    if (!maskImg.complete || !maskImg.naturalWidth) return false;
     const mw = Math.max(1, Math.round(w * (Number(scaleSlider.value) / 100)));
     if (!shaderMarkCanvas) shaderMarkCanvas = document.createElement('canvas');
     if (shaderMarkCanvas.width !== mw || shaderMarkCanvas.height !== mw) {
@@ -2298,13 +2344,8 @@
     else drawMark(ctx, w, h, fvsMark, false);
 
     const grain = Number(noiseSlider.value);
-    if (grain > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = grain / 150;
-      ctx.drawImage(noiseCanvas, 0, 0, w, h);
-      ctx.restore();
-    }
+    /* Overlay on export; the preview lets CSS blend the same tile. */
+    paintFilmGrain(ctx, w, h, grain / 100, w / (frame.clientWidth || w), 'overlay');
     if (crt && crtOn) ctx.drawImage(crtLayerFor(w, h), 0, 0, w, h);
     if (xeroxOn) {
       ctx.save();
@@ -2508,7 +2549,8 @@
   }
 
   /* ---- boot ------------------------------------------------------------- */
-  new ResizeObserver(() => { repaintBg(); if (xeroxOn) paintPaper(); }).observe(frame);
+  new ResizeObserver(() => { repaintBg(); if (xeroxOn) paintPaper(); paintGrainPreview(); }).observe(frame);
+  noiseSlider.addEventListener('input', paintGrainPreview);
   applyMediaStyle();
   applyBg();
   applyShaders();
@@ -2516,6 +2558,7 @@
   applyPaper();
   applyGrid();
   applyInkBleed();
+  paintGrainPreview();
   window.__tb3d?.setPosterFps?.(Number($('posterFps').value) || 0);
   syncShaderVisibility();
   /* Export length starts at the spin length, then belongs to the user. */

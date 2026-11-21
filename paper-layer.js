@@ -17,9 +17,9 @@ const mark = document.getElementById('fvsMark');
 const statusEl = document.getElementById('shaderStatus');
 const CYCLE_MS = 6000;
 
-const sizing = (scale) => ({
+const sizing = () => ({
   u_fit: ShaderFitOptions.contain,
-  u_scale: scale,
+  u_scale: 1,
   u_rotation: 0,
   u_originX: 0.5,
   u_originY: 0.5,
@@ -107,7 +107,7 @@ function disposeMount() {
 
 async function build(next, speed) {
   const image = await ensureLogo();
-  const s = sizing(scale);
+  const s = sizing();
   switch (next) {
     case 'dither':
       return {
@@ -115,7 +115,7 @@ async function build(next, speed) {
         uniforms: {
           ...s, u_image: image, u_imageAspectRatio: 1,
           u_colorFront: WHITE, u_colorBack: colour('#0a0a0a'), u_colorHighlight: WHITE,
-          u_type: 3, u_pxSize: 2.2, u_colorSteps: 2,
+          u_type: 3, u_pxSize: 2.2 * scale, u_colorSteps: 2,
           u_originalColors: false, u_inverted: true,
         },
       };
@@ -126,8 +126,8 @@ async function build(next, speed) {
           ...s, u_image: image, u_isImage: true, u_imageAspectRatio: 1,
           u_colorBack: CLEAR, u_colorPaper: colour('#cfc9bd'), u_colorShadow: colour('#2a2724'),
           u_blending: 0.62, u_distortion: 0.18, u_clip: true, u_angle: 45, u_seed: 7,
-          u_roughness: 0.32, u_roughnessSize: 0.45, u_roughnessRows: 0.15,
-          u_fiber: 0.3, u_fiberSize: 0.4,
+          u_roughness: 0.32, u_roughnessSize: 0.45 * scale, u_roughnessRows: 0.15,
+          u_fiber: 0.3, u_fiberSize: 0.4 * scale,
           u_folds: 0.06, u_foldSizeX: 0.42, u_foldSizeY: 0.42, u_foldOffsetX: 0, u_foldOffsetY: 0,
           u_wrinkles: 0.08, u_wrinkleSize: 0.4,
           u_crumples: 0.1, u_crumpleCount: 6, u_drops: 0.14,
@@ -141,7 +141,7 @@ async function build(next, speed) {
           u_colorBack: colour('#f2efe8'),
           u_colorC: colour('#00aeef'), u_colorM: colour('#ec008c'),
           u_colorY: colour('#fff200'), u_colorK: colour('#101010'),
-          u_size: 0.62, u_contrast: 1.15, u_softness: 0.35,
+          u_size: 0.62 * scale, u_contrast: 1.15, u_softness: 0.35,
           u_grainSize: 0.4, u_grainMixer: 0.15, u_grainOverlay: 0.1, u_gridNoise: 0.1,
           u_floodC: 0, u_floodM: 0, u_floodY: 0, u_floodK: 0,
           u_gainC: 0, u_gainM: 0, u_gainY: 0, u_gainK: 0,
@@ -154,7 +154,7 @@ async function build(next, speed) {
         uniforms: {
           ...s, u_image: await liquidSource(), u_isImage: true, u_imageAspectRatio: 1,
           u_colorBack: CLEAR, u_colorTint: WHITE,
-          u_repetition: 6, u_shiftRed: 0.35, u_shiftBlue: -0.35,
+          u_repetition: 6 * Math.max(.5, scale), u_shiftRed: 0.35, u_shiftBlue: -0.35,
           u_contour: 0.75, u_softness: 0.34, u_distortion: 0.2, u_angle: 0, u_shape: 0,
         },
       };
@@ -168,10 +168,17 @@ async function setMode(next) {
   busy = true;
   mode = next;
   disposeMount();
-  document.getElementById('shaderSize')?.toggleAttribute('disabled', next === 'off');
+  /* The old shader hid the plain mark; show it again while a new one builds. */
+  mark.style.visibility = '';
   if (next === 'off') {
+    /* The live 3D pass keeps its own loop, so it must be stopped here. Without
+       this the last dither look stays painted over the 3D preview. */
+    stop3d();
     host.dataset.active = 'false';
+    host.replaceChildren();
+    clearMask();
     mark.style.visibility = '';
+    document.getElementById('shaderSize')?.toggleAttribute('disabled', true);
     say('Logo effect off. The mark renders as before.');
     busy = false;
     return mode;
@@ -200,6 +207,8 @@ async function setMode(next) {
     mark.style.visibility = '';
     say(`Shader unavailable: ${error instanceof Error ? error.message : String(error)}`, true);
   } finally {
+    /* After a failed build mode falls back to off, so read it here. */
+    document.getElementById('shaderSize')?.toggleAttribute('disabled', mode === 'off');
     busy = false;
   }
   return mode;
@@ -210,8 +219,17 @@ function labelFor(value) {
 }
 
 function setScale(next) {
-  scale = Math.max(0.5, Math.min(2, Number(next) || 1));
-  if (mount) mount.setUniforms({ u_scale: scale });
+  scale = Math.max(0.25, Math.min(2, Number(next) || 1));
+  if (mount) {
+    const sizes = {};
+    /* Pattern density, not image zoom, so the mark always fills its frame. */
+    if (mode === 'dither') sizes.u_pxSize = 2.2 * scale;
+    if (mode === 'halftone') sizes.u_size = 0.62 * scale;
+    if (mode === 'paper') { sizes.u_roughnessSize = 0.45 * scale; sizes.u_fiberSize = 0.4 * scale; }
+    if (mode === 'liquid') sizes.u_repetition = 6 * Math.max(.5, scale);
+    mount.setUniforms(sizes);
+  }
+  return scale;
 }
 
 function beginCapture() {
@@ -286,6 +304,8 @@ function ensure3d() {
   Object.assign(canvas3d.style, {
     position: 'absolute', inset: '0', width: '100%', height: '100%',
     zIndex: '2', pointerEvents: 'none', display: 'none',
+    /* Inherit the mark's glow and ink bleed, which may already be applied. */
+    filter: source.style.filter || '',
   });
   frame.append(canvas3d);
   gl3 = canvas3d.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: true });
@@ -342,7 +362,8 @@ function draw3d() {
   gl3.bindTexture(gl3.TEXTURE_2D, texture3);
   gl3.uniform1i(uniforms3.src, 0);
   gl3.uniform1f(uniforms3.mode, MODE_3D[mode] ?? 0);
-  gl3.uniform1f(uniforms3.px, 4.0 * dpr);
+  /* Same density curve as the 2D shader, so preview and export agree. */
+  gl3.uniform1f(uniforms3.px, Math.max(1, 2.5 * dpr * scale));
   gl3.uniform2f(uniforms3.res, w, h);
   gl3.drawArrays(gl3.TRIANGLES, 0, 3);
 }
@@ -353,7 +374,7 @@ function tick3d() {
 }
 
 function start3d() {
-  if (!three3d || !(mode in MODE_3D)) return false;
+  if (!three3d || !(mode in MODE_3D)) { stop3d(); return false; }
   if (!ensure3d()) return false;
   const source = document.getElementById('threeCanvas');
   canvas3d.style.display = 'block';
@@ -383,6 +404,7 @@ window.paperLayer = {
   phase,
   endCapture,
   get mode() { return mode; },
+  get scale() { return scale; },
   get active() { return mode !== 'off' && !!mount; },
   get masked() { return isMasked(mode); },
   get canvas() { return host.querySelector('canvas'); },
