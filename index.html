@@ -614,12 +614,32 @@
               <b></b>
             </label>
             <label class="field">
-              <span>Material</span>
-              <select id="material3d" aria-label="3D material">
-                <option value="iridescent">Iridescent chrome</option>
-                <option value="silver">Silver chrome</option>
-                <option value="flat">Flat colour</option>
-                <option value="video">Video as material</option>
+              <span>Rotation</span>
+              <select id="rotationMode" aria-label="Rotation mode">
+                <option value="yspin" selected>3D Y-spin</option>
+                <option value="forward-cw">Forward CW</option>
+                <option value="forward-ccw">Forward CCW</option>
+                <option value="still">Still</option>
+              </select>
+              <b></b>
+            </label>
+            <label class="field">
+              <span>Surface fill</span>
+              <select id="surfaceFill" aria-label="Surface fill">
+                <option value="chrome" selected>Chrome</option>
+                <option value="solid">Solid</option>
+                <option value="multi">Multi-colour</option>
+                <option value="gradient">Gradient</option>
+                <option value="video">Video</option>
+              </select>
+              <b></b>
+            </label>
+            <label class="field">
+              <span>Surface texture</span>
+              <select id="surfaceTexture" aria-label="Surface texture">
+                <option value="smooth" selected>Smooth</option>
+                <option value="stipple">Stipple knit</option>
+                <option value="grain">Fine grain</option>
               </select>
               <b></b>
             </label>
@@ -633,17 +653,25 @@
               <b></b>
             </label>
             <label class="field">
-              <span>Flipbook palette</span>
-              <select id="flipPalette" aria-label="Flipbook palette" disabled>
+              <span>Colour set</span>
+              <select id="flipPalette" aria-label="Multi-colour set" disabled>
                 <option value="multi" selected>Riso multi</option>
                 <option value="tiger">Tiger ink</option>
-                <option value="mono">Cream mono</option>
                 <option value="pw-cyan-gold">PW cyan / gold</option>
                 <option value="pw-lime-pink">PW lime / pink</option>
                 <option value="pw-yellow-coral">PW yellow / coral</option>
+                <option value="mono">Cream mono</option>
               </select>
               <b></b>
             </label>
+            <div class="row">
+              <button id="shuffleColors" type="button" class="ghost" disabled>Shuffle colours</button>
+            </div>
+            <div class="field" id="videoOpacityWrap" style="display:none">
+              <span>Video opacity</span>
+              <input id="videoOpacity" type="range" min="0" max="100" value="100" aria-label="Video opacity" />
+              <b id="videoOpacityVal">100%</b>
+            </div>
             <label class="field">
               <span>Carousel axis</span>
               <select id="carouselAxis" aria-label="Carousel axis">
@@ -658,6 +686,30 @@
               <button type="button" class="ghost" data-preview-bg="transparent">Transparent</button>
             </div>
             <p id="threeStatus" role="status"></p>
+          </div>
+
+          <div class="grp" id="flipbookGrp" style="display:none">
+            <div class="grp__label">Flipbook</div>
+            <label class="field">
+              <span>Order</span>
+              <select id="flipOrder" aria-label="Flipbook order">
+                <option value="reading" selected>Reading</option>
+                <option value="shuffle">Shuffle</option>
+                <option value="pingpong">Ping-pong</option>
+              </select>
+              <b></b>
+            </label>
+            <div class="field">
+              <span>Frame</span>
+              <input id="flipFrame" type="range" min="1" max="12" value="1" aria-label="Flipbook frame" />
+              <b id="flipFrameVal">1 / 12</b>
+            </div>
+            <div class="field">
+              <span>Registration</span>
+              <input id="flipJitter" type="range" min="0" max="100" value="35" aria-label="Flipbook registration jitter" />
+              <b id="flipJitterVal">35%</b>
+            </div>
+            <p class="note">Frame steps one glyph and holds it while the 3D preview is paused. Flipbook glyphs stay upright, so rotation does not apply.</p>
           </div>
 
           <div class="grp">
@@ -688,8 +740,13 @@
             <summary>Advanced · surface</summary>
             <div class="adv__body">
               <label class="field">
-                <span>Flat colour</span>
-                <span class="color-field"><input id="flat3d" type="color" value="#eceef1" title="Flat colour" aria-label="Flat colour" /><input type="text" data-hex-for="flat3d" value="#eceef1" aria-label="Flat colour hex" maxlength="7" /></span>
+                <span>Colour 1</span>
+                <span class="color-field"><input id="flat3d" type="color" value="#eceef1" title="Colour 1" aria-label="Colour 1" /><input type="text" data-hex-for="flat3d" value="#eceef1" aria-label="Colour 1 hex" maxlength="7" /></span>
+                <b></b>
+              </label>
+              <label class="field">
+                <span>Colour 2</span>
+                <span class="color-field"><input id="flat3d2" type="color" value="#e11d48" title="Colour 2" aria-label="Colour 2" /><input type="text" data-hex-for="flat3d2" value="#e11d48" aria-label="Colour 2 hex" maxlength="7" /></span>
                 <b></b>
               </label>
               <div class="field">
@@ -788,11 +845,6 @@
               </select>
               <b></b>
             </label>
-            <div class="field">
-              <span>Flipbook jitter</span>
-              <input id="flipJitter" type="range" min="0" max="100" value="35" aria-label="Flipbook registration jitter" />
-              <b id="flipJitterVal">35%</b>
-            </div>
             <div class="field">
               <span>Shader size</span>
               <input id="shaderSize" type="range" min="50" max="200" value="100" aria-label="Shader scale" disabled />
@@ -1020,7 +1072,9 @@
   let inkBleed = 0;
   let bleedSeq = 0;
   let bleedId = 'inkBleedFilter0';
+  let gridBleedId = 'gridBleedFilter0';
   const bleedFilter = () => (inkBleed > 0 ? `url(#${bleedId})` : '');
+  const gridBleedFilter = () => (inkBleed > 0 ? `url(#${gridBleedId})` : '');
 
   function applyInkBleed() {
     inkBleed = Number($('inkBleed').value) || 0;
@@ -1031,6 +1085,10 @@
     const defs = $('inkDefs');
     if (defs) {
       const id = 'inkBleedFilter' + (++bleedSeq);
+      const gridId = 'gridBleedFilter' + bleedSeq;
+      /* The grid is hairline work: it gets the same wobble but no alpha
+         crunch, because the crunch would delete lines thinner than one
+         displacement step. */
       defs.innerHTML = `<filter id="${id}" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
         <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="noise" />
         <feDisplacementMap id="inkBleedMap" in="SourceGraphic" in2="noise" scale="${((inkBleed / 100) * 18).toFixed(2)}" xChannelSelector="R" yChannelSelector="G" result="wobbled" />
@@ -1039,12 +1097,17 @@
         <feComponentTransfer in="gritted">
           <feFuncA type="table" tableValues="0 0 0.42 0.86 1" />
         </feComponentTransfer>
+      </filter>
+      <filter id="${gridId}" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="3" seed="7" result="gridNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="gridNoise" scale="${((inkBleed / 100) * 9).toFixed(2)}" xChannelSelector="R" yChannelSelector="G" />
       </filter>`;
       bleedId = id;
+      gridBleedId = gridId;
     }
     applyShaders();
     const gridCanvas = $('newsprintCanvas');
-    if (gridCanvas) gridCanvas.style.filter = bleedFilter() || 'none';
+    if (gridCanvas) gridCanvas.style.filter = gridBleedFilter() || 'none';
     const host = $('shaderHost');
     if (host) host.style.filter = bleedFilter() || 'none';
     const pass = $('shader3dCanvas');
@@ -1086,11 +1149,11 @@
   }
   document.querySelectorAll(".swatch-btn").forEach((btn) => btn.addEventListener("click", () => selectSwatch(btn)));
 
-  for (const input of [bgColor1, bgColor2, bgColor3, glowColor, $('flat3d')]) {
+  for (const input of [bgColor1, bgColor2, bgColor3, glowColor, $('flat3d'), $('flat3d2')]) {
     input.addEventListener("input", () => {
       syncHex(input);
       if (input === glowColor) { applyShaders(); return; }
-      if (input === $('flat3d')) return;
+      if (input === $('flat3d') || input === $('flat3d2')) return;
       applyBg();
     });
   }
@@ -1144,29 +1207,31 @@
      so the panel always shows the state the preset produced. */
   const PRESETS = {
     'chrome-spin': {
-      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', material: 'iridescent',
+      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
       poster: 0, glow: true, glowPx: 7, noise: 14, shader: 'off', crt: false,
     },
     'video-reel': {
       fmt: 1, swatch: 0, video: true, spin: true, arrangement: 'carousel', axis: 'horizontal',
-      material: 'iridescent', poster: 0, glow: false, noise: 18, shader: 'off', crt: true,
+      surfaceFill: 'chrome', surfaceTexture: 'smooth', poster: 0, glow: false, noise: 18, shader: 'off', crt: true,
     },
     'riso-flipbook': {
-      fmt: 0, swatch: 3, spin: true, arrangement: 'riso', material: 'flat', flat: '#f5f2e8',
+      fmt: 0, swatch: 3, spin: true, arrangement: 'riso', surfaceFill: 'multi', surfaceTexture: 'smooth',
+      flat: '#f5f2e8', flipOrder: 'reading', rotation: 'still',
       poster: 8, glow: false, noise: 0, shader: 'off', crt: false,
       grid: { on: true, strength: 40 }, xerox: { on: true, blend: 'multiply', opacity: 35 }, bleed: 35, flip: 'multi',
     },
     'newsprint-flip': {
-      fmt: 0, swatch: 4, spin: true, arrangement: 'riso', material: 'flat', flat: '#f5f2e8',
+      fmt: 0, swatch: 4, spin: true, arrangement: 'riso', surfaceFill: 'solid', surfaceTexture: 'grain',
+      flat: '#f5f2e8', flipOrder: 'reading', rotation: 'still',
       poster: 12, glow: false, noise: 16, shader: 'off', crt: false,
       grid: { on: true, strength: 55 }, bleed: 30, flip: 'mono',
     },
     'yeso-dither': {
-      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', material: 'iridescent',
+      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
       poster: 12, glow: false, noise: 0, shader: 'dither', crt: false,
     },
     'twilight-chrome': {
-      fmt: 2, swatch: 7, spin: true, arrangement: 'lockup', material: 'iridescent',
+      fmt: 2, swatch: 7, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
       twist: 20, poster: 0, glow: true, glowPx: 7, noise: 12, shader: 'off', crt: false,
     },
   };
@@ -1177,8 +1242,20 @@
   const ensureXerox = (want) => { if (xeroxOn !== want) $('xeroxBtn').click(); };
   const setRange = (id, value) => {
     const el = $(id);
-    el.value = String(value);
+    const next = String(value);
+    const changed = el.value !== next;
+    el.value = next;
     el.dispatchEvent(new Event('input', { bubbles: true }));
+    /* Geometry sliders listen on change; fire it only when the value moved. */
+    if (changed) el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  const setHex = (id, value) => {
+    const el = $(id);
+    if (el.value === value) return;
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    syncHex(el);
   };
 
   document.querySelectorAll('[data-preset]').forEach((button) => button.addEventListener('click', () => {
@@ -1201,13 +1278,23 @@
     setRange('depthSlider', def.depth ?? 10);
     setRange('bevel3d', def.bevel ?? 2);
     setRange('speed3d', def.speed ?? 10);
-    $('flat3d').value = def.flat ?? '#eceef1';
-    if (def.material) { $('material3d').value = def.material; $('material3d').dispatchEvent(new Event('input')); }
-    if (def.flat) { $('flat3d').value = def.flat; $('flat3d').dispatchEvent(new Event('input')); }
+    setHex('flat3d', def.flat ?? '#eceef1');
+    if (def.surfaceFill) {
+      $('surfaceFill').value = def.surfaceFill;
+      $('surfaceFill').dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (def.surfaceTexture) {
+      $('surfaceTexture').value = def.surfaceTexture;
+      $('surfaceTexture').dispatchEvent(new Event('change', { bubbles: true }));
+    }
     if (def.flip) {
       $('flipPalette').value = def.flip;
       $('flipPalette').dispatchEvent(new Event('change', { bubbles: true }));
     }
+    $('flipOrder').value = def.flipOrder || 'reading';
+    $('flipOrder').dispatchEvent(new Event('change', { bubbles: true }));
+    $('rotationMode').value = def.rotation || 'yspin';
+    $('rotationMode').dispatchEvent(new Event('change', { bubbles: true }));
     if (def.arrangement) {
       const arrangement = $('arrangement3d');
       arrangement.value = def.arrangement;
@@ -1222,7 +1309,6 @@
     setRange('scaleSlider', def.scale ?? 55);
     logoLayer.style.left = `${(def.position ?? [50,50])[0]}%`;
     logoLayer.style.top = `${(def.position ?? [50,50])[1]}%`;
-    $('carouselRadius').dispatchEvent(new Event('change'));
 
     ensureSpin(def.spin);
     ensureCrt(!!def.crt);
@@ -1261,7 +1347,7 @@
       if (gridOn) $('gridBtn').click();
     }
 
-    syncFlipPalette();
+    syncSurfaceControls();
     repaintBg();
     sync3d();
     syncShaderVisibility();
@@ -1269,6 +1355,16 @@
 
   /* ---- config, saved presets and WebMCP ---------------------------------- */
   const PRESET_KEY = 'tb.customPresets.v1';
+  let multiShuffle = 0;
+
+  /* The legacy `material` key is derived from the surface fill, so a config
+     written before the surface model still reads back the same thing. */
+  function surfaceMaterialName() {
+    const fill = $('surfaceFill').value;
+    if (fill === 'chrome') return Number($('irid3d').value) > 0 ? 'iridescent' : 'silver';
+    if (fill === 'video') return 'video';
+    return 'flat';
+  }
 
   function getConfig() {
     return {
@@ -1283,8 +1379,14 @@
       mediaOpacity: Number($('bgOpacity').value),
       threeActive: spinOn,
       arrangement: $('arrangement3d').value,
-      material: $('material3d').value,
+      rotation: $('rotationMode').value,
+      surfaceFill: $('surfaceFill').value,
+      surfaceTexture: $('surfaceTexture').value,
+      /* Legacy key: older configs and tools read `material`. */
+      material: surfaceMaterialName(),
       flatColor: $('flat3d').value,
+      flatColor2: $('flat3d2').value,
+      videoOpacity: Number($('videoOpacity').value),
       bevel: Number($('bevel3d').value),
       roughness: Number($('rough3d').value),
       iridescence: Number($('irid3d').value),
@@ -1295,6 +1397,8 @@
       letterScale: Number($('letterScale').value),
       flipbookPalette: $('flipPalette').value,
       flipbookJitter: Number($('flipJitter').value),
+      flipbookOrder: $('flipOrder').value,
+      colourShuffle: multiShuffle,
       glow: glowOn,
       glowColor: glowColor.value,
       glowPx: Number(glowSlider.value),
@@ -1350,15 +1454,40 @@
     if (has('arrangement') && ['lockup', 'carousel', 'riso'].includes(cfg.arrangement)) {
       const el = $('arrangement3d'); el.value = cfg.arrangement; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('arrangement');
     }
-    if (has('material')) {
-      const el = $('material3d'); el.value = ['iridescent', 'silver', 'flat', 'video'].includes(cfg.material) ? cfg.material : 'iridescent';
-      el.dispatchEvent(new Event('input', { bubbles: true })); applied.push('material');
+    /* Surface fill: new key first, legacy `material` second. */
+    if (has('rotation')) {
+      const el = $('rotationMode');
+      const ok = [...el.options].some((o) => o.value === cfg.rotation);
+      if (ok) { el.value = cfg.rotation; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('rotation'); }
+    }
+    if (has('surfaceFill') || has('material')) {
+      const fill = $('surfaceFill');
+      let value = cfg.surfaceFill;
+      if (!['chrome', 'solid', 'multi', 'gradient', 'video'].includes(value)) {
+        value = ({ iridescent: 'chrome', silver: 'chrome', flat: 'solid', video: 'video' })[cfg.material] || 'chrome';
+        if (!has('iridescence') && cfg.material === 'silver') setRange('irid3d', 0);
+        if (!has('iridescence') && cfg.material === 'iridescent') setRange('irid3d', 100);
+        /* An old flat flipbook that carried a multi-ink palette was a
+           multi-colour surface; keep that reading when replaying it. */
+        const arrangement = cfg.arrangement || $('arrangement3d').value;
+        if (cfg.material === 'flat' && arrangement === 'riso' && cfg.flipbookPalette && cfg.flipbookPalette !== 'mono') value = 'multi';
+      }
+      fill.value = value;
+      fill.dispatchEvent(new Event('change', { bubbles: true }));
+      applied.push('surfaceFill');
+    }
+    if (has('surfaceTexture')) {
+      const el = $('surfaceTexture');
+      el.value = ['smooth', 'stipple', 'grain'].includes(cfg.surfaceTexture) ? cfg.surfaceTexture : 'smooth';
+      el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('surfaceTexture');
     }
     if (has('flatColor') && /^#[0-9a-f]{6}$/i.test(cfg.flatColor)) { $('flat3d').value = cfg.flatColor; $('flat3d').dispatchEvent(new Event('input', { bubbles: true })); applied.push('flatColor'); }
+    if (has('flatColor2') && /^#[0-9a-f]{6}$/i.test(cfg.flatColor2)) { $('flat3d2').value = cfg.flatColor2; $('flat3d2').dispatchEvent(new Event('input', { bubbles: true })); applied.push('flatColor2'); }
     for (const [key, id, min, max, fallback] of [
       ['bevel', 'bevel3d', 0, 8, 3], ['roughness', 'rough3d', 0, 100, 15], ['iridescence', 'irid3d', 0, 100, 100],
       ['twist', 'liquidTwist', 0, 100, 0], ['carouselRadius', 'carouselRadius', 2, 8, 4],
       ['letterScale', 'letterScale', 0.5, 4, 2], ['flipbookJitter', 'flipJitter', 0, 100, 35],
+      ['videoOpacity', 'videoOpacity', 0, 100, 100],
       ['glowPx', 'glowSlider', 4, 48, 7], ['grain', 'noiseSlider', 0, 100, 0],
       ['xeroxOpacity', 'paperOpacity', 0, 100, 70], ['inkBleed', 'inkBleed', 0, 100, 0],
       ['gridStrength', 'gridStrength', 0, 100, 35], ['shaderSize', 'shaderSize', 50, 200, 100],
@@ -1371,6 +1500,16 @@
       const el = $('flipPalette');
       const ok = [...el.options].some((o) => o.value === cfg.flipbookPalette);
       if (ok) { el.value = cfg.flipbookPalette; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('flipbookPalette'); }
+    }
+    if (has('flipbookOrder')) {
+      const el = $('flipOrder');
+      const ok = [...el.options].some((o) => o.value === cfg.flipbookOrder);
+      if (ok) { el.value = cfg.flipbookOrder; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('flipbookOrder'); }
+    }
+    if (has('colourShuffle')) {
+      const n = Math.max(0, Math.round(num(cfg.colourShuffle, 0)));
+      multiShuffle = window.__tb3d?.shuffleColors?.(n) ?? n;
+      applied.push('colourShuffle');
     }
     if (has('paperShader')) {
       const el = $('paperShader');
@@ -1399,7 +1538,7 @@
     repaintBg();
     sync3d();
     syncShaderVisibility();
-    syncFlipPalette();
+    syncSurfaceControls();
     return { ok: true, applied };
   }
 
@@ -1944,17 +2083,47 @@
   });
   $('inkBleed').addEventListener('input', applyInkBleed);
 
-  function syncFlipPalette() {
+  /* Surface fill and texture apply to every arrangement, so the colour set
+     and the video depth stay live for lockup, carousel and flipbook alike. */
+  function syncSurfaceControls() {
+    const fill = $('surfaceFill').value;
     const isRiso = $('arrangement3d').value === 'riso';
-    $('flipPalette').disabled = !isRiso;
+    const isMulti = fill === 'multi';
+    $('flipPalette').disabled = !isMulti;
+    $('shuffleColors').disabled = !isMulti;
+    $('videoOpacityWrap').style.display = fill === 'video' ? '' : 'none';
+    $('flipbookGrp').style.display = isRiso ? '' : 'none';
+    $('flipFrame').disabled = !isRiso;
+    $('flipOrder').disabled = !isRiso;
+    $('rotationMode').disabled = isRiso;
     $('flipJitter').disabled = !isRiso;
   }
+
+  $('arrangement3d').addEventListener('change', syncSurfaceControls);
+  $('surfaceFill').addEventListener('change', () => {
+    syncSurfaceControls();
+    window.__tb3d?.refreshMaterial?.();
+  });
+  $('surfaceTexture').addEventListener('change', () => window.__tb3d?.refreshMaterial?.());
+  $('videoOpacity').addEventListener('input', () => {
+    $('videoOpacityVal').textContent = $('videoOpacity').value + '%';
+    window.__tb3d?.refreshMaterial?.();
+  });
+  $('shuffleColors').addEventListener('click', () => {
+    const offset = window.__tb3d?.shuffleColors?.();
+    if (Number.isFinite(offset)) multiShuffle = offset;
+  });
+  $('flipOrder').addEventListener('change', () => window.__tb3d?.setRisoOrder?.());
+  $('rotationMode').addEventListener('change', () => window.__tb3d?.applyRotation?.());
+  $('flipFrame').addEventListener('input', () => {
+    $('flipFrameVal').textContent = `${$('flipFrame').value} / ${$('flipFrame').max}`;
+    window.__tb3d?.setRisoFrame?.(Number($('flipFrame').value) - 1);
+  });
   $('flipJitter').addEventListener('input', () => {
     $('flipJitterVal').textContent = $('flipJitter').value + '%';
     window.__tb3d?.refreshRiso?.();
   });
-  $('arrangement3d').addEventListener('change', syncFlipPalette);
-  syncFlipPalette();
+  syncSurfaceControls();
 
   $('posterFps').addEventListener('change', () => {
     const fps = Number($('posterFps').value) || 0;
@@ -2091,6 +2260,20 @@
   });
   $('gridStrength').addEventListener('input', () => { if (gridOn) paintGrid(); });
 
+  /* The grid is composited as one full-frame image. A filter applied to each
+     1px rule on its own has a filter region smaller than the displacement, so
+     the rules would disappear from the export. */
+  let gridLayer = { key: '', canvas: null };
+  function gridLayerFor(w, h) {
+    const key = [w, h, $('gridStrength').value, groundInk()].join('|');
+    if (gridLayer.canvas && gridLayer.key === key) return gridLayer.canvas;
+    const layer = document.createElement('canvas');
+    layer.width = w; layer.height = h;
+    drawGrid(layer.getContext('2d'), w, h);
+    gridLayer = { key, canvas: layer };
+    return layer;
+  }
+
   function drawFrame(ctx, w, h, { print = false, crt = false } = {}) {
     const cached = bgLayerFor(w, h);
     if (cached) ctx.drawImage(cached, 0, 0);
@@ -2102,10 +2285,11 @@
       ctx.globalAlpha = 1;
     }
     if (gridOn) {
-      const bleed = bleedFilter();
+      const bleed = gridBleedFilter();
+      const layer = gridLayerFor(w, h);
       ctx.save();
       if (bleed) ctx.filter = bleed;
-      drawGrid(ctx, w, h);
+      ctx.drawImage(layer, 0, 0);
       ctx.restore();
     }
     if (spinOn) drawMark(ctx, w, h, window.paperLayer?.canvas3d || $('threeCanvas'), true);
@@ -2191,7 +2375,12 @@
   }
   /* The CDN module loads asynchronously; reconcile once it exists. */
   (function waitFor3d(tries = 0) {
-    if (window.__tb3d) { sync3d(); return; }
+    if (window.__tb3d) {
+      sync3d();
+      /* A config applied before the module loaded keeps its colour shuffle. */
+      if (multiShuffle) window.__tb3d.shuffleColors?.(multiShuffle);
+      return;
+    }
     if (tries < 40) window.setTimeout(() => waitFor3d(tries + 1), 250);
   })();
   const reelLength = $('reelLength');
@@ -2255,14 +2444,13 @@
       const held = Math.floor(frameIndex / holdStep) * holdStep;
       const tNorm = Math.min(0.9995, held / totalFrames);
       if (spinOn && window.__tb3d && window.__tb3d.setPhase) {
-        /* Set the phase only: the 3D module renders on its own loop, so the
-           main thread stays free for the encoder. */
         window.__tb3d.setPhase(tNorm, loops);
       }
+      /* Draw the locked phase before anything copies the canvas, so every
+         rotation mode and every flipbook step is exact. */
+      if (spinOn) window.__tb3d?.renderPhaseFrame?.();
       window.paperLayer?.phase(tNorm);
       if (spinOn) window.paperLayer?.render3d?.();
-      /* A flipbook step must be on the canvas before we copy it. */
-      if (spinOn && window.__tb3d?.mode === 'riso') window.__tb3d.renderPhaseFrame?.();
       drawFrame(ctx, width, height, { print: true, crt: true });
       if (track) track.requestFrame();
       frameIndex++;

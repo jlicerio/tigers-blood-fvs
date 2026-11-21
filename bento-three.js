@@ -12,9 +12,8 @@ let previous = performance.now(), lastVideoUrl = '';
 let phaseLock = false, playingBeforePhase = true;
 function renderPhaseFrame() {
   if (!renderer || !pivot) return false;
-  const vertical = $('arrangement3d').value === 'carousel' && $('carouselAxis').value === 'vertical';
-  if (risoMode) { pivot.rotation.set(0, 0, 0); applyRisoStep(); }
-  else pivot.rotation.set(vertical ? -angle : 0, vertical ? 0 : -angle, 0);
+  if (risoMode) applyRisoStep();
+  applyRotation();
   liquidUniforms.uTwist.value = +$('liquidTwist').value / 100;
   const distance = camera.position.z;
   const viewHeight = 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -24,6 +23,17 @@ function renderPhaseFrame() {
   renderer.render(scene, camera);
   return true;
 }
+/* One owner for the pivot's rotation, so the live loop and the export phase
+   cannot disagree. Riso Flipbook steps upright glyphs, so it stays unrotated. */
+function applyRotation() {
+  if (!pivot) return;
+  const mode = $('rotationMode')?.value || 'yspin';
+  if (risoMode || mode === 'still') { pivot.rotation.set(0, 0, 0); return; }
+  if (mode === 'forward-cw') { pivot.rotation.set(0, 0, -angle); return; }
+  if (mode === 'forward-ccw') { pivot.rotation.set(0, 0, angle); return; }
+  const vertical = $('arrangement3d').value === 'carousel' && $('carouselAxis').value === 'vertical';
+  pivot.rotation.set(vertical ? -angle : 0, vertical ? 0 : -angle, 0);
+}
 function setPhase(tNorm, loops = 1) {
   if (!renderer || !pivot) return false;
   const t = Math.min(0.999999, Math.max(0, Number(tNorm) || 0));
@@ -31,6 +41,7 @@ function setPhase(tNorm, loops = 1) {
   if (!phaseLock) playingBeforePhase = playing;
   phaseLock = true;
   playing = false;
+  risoOverride = null;
   angle = t * Math.PI * 2 * turns;
   liquidUniforms.uTime.value = t * Math.PI * 2 * turns;
   applyRisoStep();
@@ -39,6 +50,7 @@ function setPhase(tNorm, loops = 1) {
 function releasePhase() {
   if (phaseLock) playing = playingBeforePhase;
   phaseLock = false;
+  risoOverride = null;
   previous = performance.now();
 }
 let posterFps = 0;
@@ -47,6 +59,11 @@ let risoMode = false;
 let risoHolders = [];
 let risoJitter = [];
 let risoStep = 0;
+/* Surface state. Declared before the boot call to rebuild(), because that call
+   paints the first surface during module evaluation. */
+let stippleTexture, grainTexture, gradientTexture;
+let paletteMaterials = [], multiOffset = 0;
+let risoSeq = [], risoSeqKey = '', risoOverride = null, risoStepPos = 0, risoOrderSeed = 0;
 const RISO_PALETTES = {
   multi: ['#f5f2e8', '#e11d48', '#1d4ed8', '#facc15', '#10b981', '#111111'],
   tiger: ['#f5f2e8', '#c8102e', '#111111', '#a1a1aa'],
@@ -112,14 +129,121 @@ try {
   $('spinBtn').disabled = true;
 }
 
+/* ---- surface model ------------------------------------------------------
+   Surface fill decides what a letter is made of. Surface texture adds a
+   tactile finish on top of any fill. One model for lockup, carousel and
+   flipbook, so a colour set or a knit never depends on the arrangement.
+   ------------------------------------------------------------------------ */
+function surfaceFill() { return $('surfaceFill')?.value || 'chrome'; }
+function surfaceTexture() { return $('surfaceTexture')?.value || 'smooth'; }
+function hexOr(value, fallback) { return /^#[0-9a-f]{6}$/i.test(value || '') ? value : fallback; }
+
+/* 256 px knit tile: paired stitches with a soft crown and a dark valley. */
+function makeStippleTexture() {
+  const size = 256, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = '#7d7d7d'; x.fillRect(0, 0, size, size);
+  const cell = 16;
+  for (let row = 0; row < size / cell; row++) for (let col = 0; col < size / cell; col++) {
+    const cx = col * cell + cell / 2, cy = row * cell + cell / 2;
+    const lift = (row + col) % 2 ? 34 : -30;
+    const g = x.createRadialGradient(cx, cy, .5, cx, cy, cell * .62);
+    g.addColorStop(0, `rgb(${128 + lift},${128 + lift},${128 + lift})`);
+    g.addColorStop(.6, `rgb(${128 + Math.round(lift * .3)},${128 + Math.round(lift * .3)},${128 + Math.round(lift * .3)})`);
+    g.addColorStop(1, 'rgb(124,124,124)');
+    x.fillStyle = g; x.beginPath(); x.arc(cx, cy, cell * .62, 0, Math.PI * 2); x.fill();
+    /* A flat slub across the crown keeps the weave from reading as dots. */
+    x.fillStyle = 'rgba(255,255,255,.30)';
+    x.fillRect(cx - cell * .3, cy - 1, cell * .6, 2);
+  }
+  for (let i = 0; i < 5200; i++) {
+    const v = 90 + (Math.random() * 76 | 0);
+    x.fillStyle = `rgba(${v},${v},${v},.5)`;
+    x.fillRect(Math.random() * size | 0, Math.random() * size | 0, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(7, 7); t.anisotropy = 4;
+  return t;
+}
+
+/* Fine 512 px stone/paper micro-grain: high frequency, no visible motif. */
+function makeGrainTexture() {
+  const size = 512, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d');
+  const img = x.createImageData(size, size), d = img.data;
+  let seed = 987654321;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 128 + (rnd() + rnd() - 1) * 52;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4, 4); t.anisotropy = 4;
+  return t;
+}
+
+/* The gradient runs across the shared planar UVs, so it spans the whole mark. */
+function makeGradientTexture(from, to) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 16;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 256, 0);
+  g.addColorStop(0, hexOr(from, '#eceef1'));
+  g.addColorStop(1, hexOr(to, '#e11d48'));
+  x.fillStyle = g; x.fillRect(0, 0, 256, 16);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
 function makeMaterial() {
-  const mode = $('material3d').value;
+  const fill = surfaceFill();
+  const rough = Math.max(.04, +$('rough3d').value / 100);
+  const irid = +$('irid3d').value / 100;
+  const c1 = hexOr($('flat3d')?.value, '#eceef1');
+  const c2 = hexOr($('flat3d2')?.value, '#e11d48');
   let result;
-  if (mode === 'video') {
-    if (!videoTexture) { setStatus('Choose a local video first. Showing silver chrome.'); result = new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:1,roughness:.2}); }
-    else result = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-  } else if (mode === 'flat') result = new THREE.MeshStandardMaterial({ color: $('flat3d').value, roughness:.8, side:THREE.DoubleSide });
-  else result = new THREE.MeshPhysicalMaterial({color:0xffffff, metalness:1, roughness:Math.max(.04, +$('rough3d').value / 100), iridescence:mode === 'iridescent' ? +$('irid3d').value / 100 : 0, iridescenceIOR:1.3, iridescenceThicknessRange:[210,900], side:THREE.DoubleSide});
+  if (fill === 'chrome') {
+    /* Iridescence at 0 is polished silver; at 1 it is iridescent chrome. */
+    result = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: rough,
+      iridescence: irid, iridescenceIOR: 1.3, iridescenceThicknessRange: [210, 900], side: THREE.DoubleSide });
+  } else if (fill === 'gradient') {
+    gradientTexture?.dispose();
+    gradientTexture = makeGradientTexture(c1, c2);
+    /* Printed fills stay matte; the ink should not read as polished plastic. */
+    result = new THREE.MeshPhysicalMaterial({ map: gradientTexture, metalness: 0, roughness: Math.max(.4, rough), side: THREE.DoubleSide });
+  } else if (fill === 'video') {
+    const opacity = Math.max(0, Math.min(100, Number($('videoOpacity')?.value ?? 100))) / 100;
+    result = new THREE.MeshPhysicalMaterial({ metalness: .15, roughness: rough, iridescence: irid,
+      iridescenceIOR: 1.3, iridescenceThicknessRange: [210, 900], transparent: true, opacity,
+      side: THREE.DoubleSide });
+    if (videoTexture) result.map = videoTexture;
+    else { result.color.set('#c9ccd2'); setStatus('Choose a local video first. Showing a graphite surface.'); }
+  } else {
+    /* Solid and multi-colour share one base; multi tints a material per ink.
+       Matte by default, because these are printed inks, not metal. */
+    result = new THREE.MeshPhysicalMaterial({ color: c1, metalness: 0, roughness: Math.max(.5, rough), side: THREE.DoubleSide });
+  }
+  const texture = surfaceTexture();
+  if (texture === 'stipple') {
+    stippleTexture = stippleTexture || makeStippleTexture();
+    result.bumpMap = stippleTexture;
+    result.bumpScale = .55;
+    /* A knit needs a broad, soft highlight, not a specular pin. */
+    result.sheen = 1;
+    result.sheenRoughness = .45;
+    result.sheenColor = new THREE.Color('#ffffff');
+  } else if (texture === 'grain') {
+    grainTexture = grainTexture || makeGrainTexture();
+    result.bumpMap = grainTexture;
+    result.bumpScale = .28;
+  }
   result.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, liquidUniforms);
     shader.vertexShader = 'uniform float uTime; uniform float uTwist; uniform vec3 uCenter; uniform float uExtent;\n' + shader.vertexShader;
@@ -127,27 +251,121 @@ function makeMaterial() {
     shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', twist + '#include <beginnormal_vertex>\nobjectNormal.xz = liquidRotation * objectNormal.xz;');
     shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.xz = liquidRotation * (transformed.xz - uCenter.xz) + uCenter.xz;');
   };
-  result.customProgramCacheKey = () => 'tb-liquid-v1';
+  result.customProgramCacheKey = () => `tb-liquid-${fill}-${texture}`;
   return result;
 }
 
-/* Map the phase to a glyph index and apply the registration jitter. */
+/* Give every mesh the fill it should show. Multi-colour rebuilds one material
+   per ink and walks the meshes in reading order, so the cycle is stable. */
+function paintSurface(root, base) {
+  const meshes = [];
+  root.traverse(object => { if (object.isMesh) meshes.push(object); });
+  const previous = paletteMaterials;
+  paletteMaterials = [];
+  if (surfaceFill() === 'multi') {
+    const palette = risoPalette().filter(Boolean);
+    paletteMaterials = palette.map(hex => {
+      const tinted = makeMaterial();
+      tinted.color.set(hex);
+      tinted.needsUpdate = true;
+      return tinted;
+    });
+    meshes.forEach((mesh, i) => {
+      mesh.material = paletteMaterials[(i + multiOffset) % paletteMaterials.length];
+    });
+  } else {
+    meshes.forEach(mesh => { mesh.material = base; });
+  }
+  for (const material of previous) material.dispose();
+  return meshes.length;
+}
+
+/* Order maps a phase to the displayed sequence: reading, shuffled, or a
+   forward-and-back ramp. The seam lands back on the first glyph in each case. */
+function risoSequence(n) {
+  const order = $('flipOrder')?.value || 'reading';
+  const seq = [];
+  for (let i = 0; i < n; i++) seq.push(i);
+  if (order === 'pingpong') {
+    for (let i = n - 2; i >= 1; i--) seq.push(i);
+    return seq;
+  }
+  if (order === 'shuffle') {
+    /* Order owns its own seed: shuffling inks must not reorder the glyphs. */
+    let seed = (20260101 + risoOrderSeed * 7919) >>> 0;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    for (let i = seq.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const swap = seq[i]; seq[i] = seq[j]; seq[j] = swap;
+    }
+  }
+  return seq;
+}
+function currentRisoSequence() {
+  const n = risoHolders.length;
+  const key = `${n}|${$('flipOrder')?.value || 'reading'}|${risoOrderSeed}`;
+  if (key !== risoSeqKey) { risoSeq = risoSequence(n); risoSeqKey = key; }
+  return risoSeq;
+}
+function syncFrameControl(pos, total) {
+  const input = $('flipFrame'), out = $('flipFrameVal');
+  if (input) {
+    if (input.max !== String(total)) input.max = String(total);
+    if (document.activeElement !== input && input.value !== String(pos + 1)) input.value = String(pos + 1);
+  }
+  const label = `${pos + 1} / ${total}`;
+  if (out && out.textContent !== label) out.textContent = label;
+}
+
+/* Map the phase to a glyph and apply the registration jitter. */
 function applyRisoStep() {
   if (!risoMode || !risoHolders.length) return;
-  const n = risoHolders.length;
+  const seq = currentRisoSequence(), total = seq.length;
   const turn = Math.PI * 2;
-  const t = ((angle % turn) + turn) % turn;
-  const step = Math.min(n - 1, Math.floor((t / turn) * n));
-  risoStep = step;
-  for (let i = 0; i < n; i++) risoHolders[i].visible = i === step;
-  const j = risoJitter[step];
-  const holder = risoHolders[step];
-  if (j && holder) {
+  let pos;
+  if (risoOverride !== null) {
+    pos = Math.max(0, Math.min(total - 1, Math.round(risoOverride)));
+  } else {
+    const t = (((angle % turn) + turn) % turn) / turn;
+    pos = Math.min(total - 1, Math.floor(t * total));
+  }
+  const step = seq[pos];
+  risoStep = step; risoStepPos = pos;
+  for (let i = 0; i < risoHolders.length; i++) risoHolders[i].visible = i === step;
+  const jitter = risoJitter[step], holder = risoHolders[step];
+  if (jitter && holder) {
     /* 0 % dead-locked, 100 % loose analog zine */
     const amp = (Math.max(0, Math.min(100, Number($('flipJitter')?.value ?? 35))) / 100) * 0.09;
-    holder.position.set(j.x * amp, j.y * amp, 0);
-    holder.rotation.z = j.r * amp;
+    holder.position.set(jitter.x * amp, jitter.y * amp, 0);
+    holder.rotation.z = jitter.r * amp;
   }
+  syncFrameControl(pos, total);
+}
+
+/* Hold one glyph while paused, so a step can be inspected at full size. */
+function setRisoFrame(pos) {
+  if (!risoMode || !risoHolders.length) return false;
+  risoOverride = Math.max(0, Math.round(Number(pos) || 0));
+  playing = false;
+  const button = $('pause3d');
+  if (button) button.textContent = 'Play';
+  renderPhaseFrame();
+  return true;
+}
+function setRisoOrder() {
+  /* A fresh shuffle each time Order is touched. */
+  risoOrderSeed++;
+  risoSeqKey = '';
+  risoOverride = null;
+  if (risoMode) { applyRisoStep(); renderPhaseFrame(); }
+  return true;
+}
+/* Rotate the ink cycle without touching the palette order. */
+function shuffleColors(seed) {
+  multiOffset = Number.isFinite(Number(seed)) ? Math.max(0, Math.round(Number(seed))) : Math.floor(Math.random() * 997) + 1;
+  if (pivot) paintSurface(pivot, material);
+  if (risoMode) applyRisoStep();
+  return multiOffset;
 }
 
 function rebuild() {
@@ -243,11 +461,6 @@ function rebuild() {
         const size = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
         const factor = Math.min(4.2 / Math.max(size.y, 1), 5.4 / Math.max(size.x, 1));
         mesh.scale.set(factor, -factor, factor);
-        const palette = risoPalette();
-        if (palette.length > 1) {
-          mesh.material = material.clone();
-          mesh.material.color.set(palette[index % palette.length]);
-        }
         const holder = new THREE.Group();
         holder.add(mesh);
         holder.visible = index === 0;
@@ -260,8 +473,11 @@ function rebuild() {
         group.add(holder);
       });
       pivot.add(group);
+      paintSurface(pivot, material);
+      risoSeqKey = '';
+      risoOverride = null;
       applyRisoStep();
-      window.__tb3d = {get shapes(){return risoHolders.length},get angle(){return angle},get active(){return active},get mode(){return 'riso'},get step(){return risoStep},...phaseApi, refreshRiso: applyRisoStep};
+      window.__tb3d = withSurfaceView({get shapes(){return risoHolders.length},get angle(){return angle},get active(){return active},get mode(){return 'riso'},get step(){return risoStep},get stepPos(){return risoStepPos},...phaseApi, ...surfaceApi()});
       return;
     }
     group.clear();
@@ -290,7 +506,8 @@ function rebuild() {
       holder.add(mesh); group.add(holder);
     });
     pivot.add(group);
-    window.__tb3d = {get shapes(){return pieces.length},get angle(){return angle},get active(){return active},get mode(){return 'carousel'},...phaseApi, refreshRiso: applyRisoStep};
+    paintSurface(pivot, material);
+    window.__tb3d = withSurfaceView({get shapes(){return pieces.length},get angle(){return angle},get active(){return active},get mode(){return 'carousel'},...phaseApi, ...surfaceApi()});
     return;
   }
   group.scale.y = -1;
@@ -299,12 +516,39 @@ function rebuild() {
   group.position.sub(center);
   const scale = 4.1 / Math.max(size.x,size.y); group.scale.multiplyScalar(scale); group.position.multiplyScalar(scale);
   pivot.add(group);
-  window.__tb3d = { get shapes(){return group.children.length}, get holes(){return paths.reduce((n,p)=>n+SVGLoader.createShapes(p).reduce((sum,s)=>sum+s.holes.length,0),0)}, get angle(){return angle}, get active(){return active}, ...phaseApi };
+  paintSurface(pivot, material);
+  window.__tb3d = withSurfaceView({ get shapes(){return group.children.length}, get holes(){return paths.reduce((n,p)=>n+SVGLoader.createShapes(p).reduce((sum,s)=>sum+s.holes.length,0),0)}, get angle(){return angle}, get active(){return active}, ...phaseApi, ...surfaceApi() });
 }
 
+/* A fill or texture change never needs new geometry, only new materials. */
 function refreshMaterial() {
-  if (!pivot || !material) return;
-  const old = material; material = makeMaterial(); pivot.traverse(o=>{if(o.isMesh)o.material=material}); old.dispose();
+  if (!pivot) return;
+  const old = material;
+  material = makeMaterial();
+  paintSurface(pivot, material);
+  old?.dispose();
+}
+/* Hoisted: rebuild() runs during module evaluation, before this line. */
+function surfaceApi() {
+  return { setRisoFrame, setRisoOrder, shuffleColors, refreshMaterial, refreshRiso: applyRisoStep, applyRotation };
+}
+/* Object spread copies a getter's value once, so the live surface view is
+   defined on the finished object instead of inside the spread. */
+function withSurfaceView(api) {
+  Object.defineProperty(api, 'surface', {
+    enumerable: true,
+    get: () => ({
+      fill: surfaceFill(),
+      texture: surfaceTexture(),
+      palette: $('flipPalette')?.value || 'multi',
+      offset: multiOffset,
+      inks: paletteMaterials.map(m => '#' + m.color.getHexString()),
+      bump: !!material?.bumpMap,
+      sheen: material?.sheen || 0,
+      opacity: material?.opacity ?? 1,
+    }),
+  });
+  return api;
 }
 
 window.addEventListener('preview3d', e => {
@@ -322,15 +566,22 @@ window.addEventListener('logo-video', () => {
   videoTexture.colorSpace = THREE.SRGBColorSpace;
   videoTexture.needsUpdate = true;
   $('srcLogoVid').play().catch(() => setStatus('Video could not play. Choose a supported local video.'));
-  $('material3d').value = 'video';
+  const fill = $('surfaceFill');
+  if (fill) { fill.value = 'video'; fill.dispatchEvent(new Event('change', { bubbles: true })); }
   if (!active) $('spinBtn').click();
   requestAnimationFrame(()=>{ canvas.style.display='block'; $('fvsMark').style.display='none'; $('logoCanvas').style.display='none'; refreshMaterial(); });
 });
-for (const id of ['material3d','flat3d','rough3d','irid3d']) $(id).addEventListener('input',refreshMaterial);
+for (const id of ['flat3d','flat3d2','rough3d','irid3d']) $(id).addEventListener('input',refreshMaterial);
 for (const id of ['depthSlider','bevel3d']) $(id).addEventListener('change',rebuild);
 for (const id of ['arrangement3d','carouselRadius','letterScale','carouselAxis','flipPalette']) $(id).addEventListener('change',rebuild);
-$('pause3d').addEventListener('click', e=>{playing=!playing;e.target.textContent=playing?'Pause':'Play';previous=performance.now();});
-$('reset3d').addEventListener('click',()=>{angle=0; if(pivot)pivot.rotation.set(0,0,0);});
+$('pause3d').addEventListener('click', e=>{
+  playing=!playing;
+  /* Resuming playback releases a held flipbook frame. */
+  if (playing) risoOverride = null;
+  e.target.textContent=playing?'Pause':'Play';
+  previous=performance.now();
+});
+$('reset3d').addEventListener('click',()=>{angle=0; risoOverride=null; if(pivot)pivot.rotation.set(0,0,0);});
 for (const button of document.querySelectorAll('[data-preview-bg]')) button.addEventListener('click',()=>{
   const value=button.dataset.previewBg;
   $('bgImg').style.display='none'; $('bgVid').style.display='none';
@@ -346,9 +597,8 @@ function animate(now) {
       angle = (clock * Math.PI * 2 / Math.max(0.1, +$('speed3d').value)) % (Math.PI * 2);
       liquidUniforms.uTime.value = posterClock(now / 1000);
     }
-    const vertical=$('arrangement3d').value === 'carousel' && $('carouselAxis').value === 'vertical';
-    if (risoMode) { pivot.rotation.set(0, 0, 0); applyRisoStep(); }
-    else pivot.rotation.set(vertical ? -angle : 0,vertical ? 0 : -angle,0);
+    if (risoMode) applyRisoStep();
+    applyRotation();
     liquidUniforms.uTwist.value = +$('liquidTwist').value / 100;
     const frame = $('fvsFrame'), distance = camera.position.z;
     const viewHeight = 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
