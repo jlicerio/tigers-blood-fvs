@@ -943,9 +943,7 @@
     ctx.globalCompositeOperation = field > 0.5 ? 'multiply' : 'screen';
     ctx.globalAlpha = (amount / 100) * 0.42;
     ctx.imageSmoothingEnabled = true;
-    for (let y = 0; y < h; y += cell) {
-      for (let x = 0; x < w; x += cell) ctx.drawImage(bgNoiseTile, x, y, cell, cell);
-    }
+    ctx.drawImage(bgNoiseTile, 0, 0, w, h);
     ctx.restore();
   }
 
