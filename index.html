@@ -899,30 +899,21 @@
      so the on-screen gradient and the PNG can never disagree. */
   let bgNoiseTile = null;
   function buildBgNoiseTile() {
-    const size = 192;
+    const size = 512;
     const tile = document.createElement('canvas');
     tile.width = size; tile.height = size;
     const c = tile.getContext('2d');
-    c.fillStyle = 'rgb(128,128,128)';
-    c.fillRect(0, 0, size, size);
+    const img = c.createImageData(size, size);
+    const d = img.data;
     const rand = seeded(4242);
-    /* coarse wash: soft patches either side of neutral grey */
-    for (let i = 0; i < 70; i++) {
-      const x = rand() * size, y = rand() * size, r = 10 + rand() * 46;
-      const up = rand() > 0.5;
-      const g = c.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, up ? `rgba(200,200,200,${(0.10 + rand() * 0.18).toFixed(3)})` : `rgba(60,60,60,${(0.10 + rand() * 0.18).toFixed(3)})`);
-      g.addColorStop(1, up ? 'rgba(200,200,200,0)' : 'rgba(60,60,60,0)');
-      c.fillStyle = g;
-      c.fillRect(x - r, y - r, r * 2, r * 2);
+    /* pure fine-grain monochrome noise, zero splotches */
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (rand() + rand() - 1) * 70;
+      const v = Math.max(0, Math.min(255, Math.round(128 + n)));
+      d[i] = d[i + 1] = d[i + 2] = v;
+      d[i + 3] = 255;
     }
-    /* toner-ish speckle at the same scale */
-    for (let i = 0; i < 2600; i++) {
-      const v = rand() > 0.5 ? 210 : 56;
-      c.fillStyle = `rgba(${v},${v},${v},${(0.05 + rand() * 0.12).toFixed(3)})`;
-      const px = rand() > 0.88 ? 2 : 1;
-      c.fillRect(rand() * size, rand() * size, px, px);
-    }
+    c.putImageData(img, 0, 0);
     bgNoiseTile = tile;
   }
 
