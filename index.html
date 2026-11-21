@@ -443,7 +443,7 @@
             <button data-preset="chrome-spin">Chrome Spin</button>
             <button data-preset="video-reel">Video Reel</button>
             <button data-preset="riso-flipbook">Riso Flipbook</button>
-            <button data-preset="newsprint-flip">Newsprint Flip</button>
+            <button data-preset="zine-negative">Zine Negative</button>
             <button data-preset="yeso-dither">Yeso Dither</button>
             <button data-preset="twilight-chrome">Twilight Chrome</button>
           </div>
@@ -1255,43 +1255,25 @@
   });
 
   /* ---- presets ---------------------------------------------------------- */
-  /* Six curated FVS combos. Each one drives the same controls a person uses,
-     so the panel always shows the state the preset produced. */
+  /* Six art-directed combos. Each entry is a full config in the same shape as
+     getConfig(), so a preset reproduces exactly the look that was approved. */
   const PRESETS = {
-    'chrome-spin': {
-      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
-      poster: 0, glow: true, glowPx: 7, noise: 14, shader: 'off', crt: false,
-    },
-    'video-reel': {
-      fmt: 1, swatch: 0, video: true, spin: true, arrangement: 'carousel', axis: 'horizontal',
-      surfaceFill: 'chrome', surfaceTexture: 'smooth', poster: 0, glow: false, noise: 18, shader: 'off', crt: true,
-    },
-    'riso-flipbook': {
-      fmt: 0, swatch: 3, spin: true, arrangement: 'riso', surfaceFill: 'multi', surfaceTexture: 'smooth',
-      flat: '#f5f2e8', flipOrder: 'reading', rotation: 'still',
-      poster: 8, glow: false, noise: 0, shader: 'off', crt: false,
-      grid: { on: true, strength: 40 }, xerox: { on: true, blend: 'multiply', opacity: 35 }, bleed: 35, flip: 'multi',
-    },
-    'newsprint-flip': {
-      fmt: 0, swatch: 4, spin: true, arrangement: 'riso', surfaceFill: 'solid', surfaceTexture: 'grain',
-      flat: '#f5f2e8', flipOrder: 'reading', rotation: 'still',
-      poster: 12, glow: false, noise: 16, shader: 'off', crt: false,
-      grid: { on: true, strength: 55 }, bleed: 30, flip: 'mono',
-    },
-    'yeso-dither': {
-      fmt: 0, swatch: 0, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
-      poster: 12, glow: false, noise: 0, shader: 'dither', crt: false,
-    },
-    'twilight-chrome': {
-      fmt: 2, swatch: 7, spin: true, arrangement: 'lockup', surfaceFill: 'chrome', surfaceTexture: 'smooth',
-      twist: 20, poster: 0, glow: true, glowPx: 7, noise: 12, shader: 'off', crt: false,
-    },
+    'chrome-spin': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":45,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"grain","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":7,"roughness":20,"iridescence":100,"twist":12,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":7,"grain":14,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
+    'video-reel': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":70,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"carousel","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":8,"grain":100,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":100,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":true,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
+    'riso-flipbook': {"version":1,"format":0,"bgMode":"solid","bgColors":["#f5f5f5","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"riso","rotation":"still","surfaceFill":"multi","surfaceTexture":"grain","material":"flat","flatColor":"#f5f2e8","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":8,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":14,"grain":73,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":41,"inkBleed":56,"newsprintGrid":false,"gridStrength":40,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":false,"print":"off"},
+    'zine-negative': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":98,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"riso","rotation":"still","surfaceFill":"multi","surfaceTexture":"grain","material":"flat","flatColor":"#f5f2e8","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":55,"fps":8,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"mono","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":5,"grain":0,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":35,"inkBleed":71,"newsprintGrid":true,"gridStrength":40,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
+    'yeso-dither': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":12,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":false,"glowColor":"#ffffff","glowPx":7,"grain":0,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"dither","shaderSize":100,"invertMark":true,"print":"off"},
+    'twilight-chrome': {"version":1,"format":2,"bgMode":"linear","bgColors":["#151b2c","#404256","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":20,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":7,"grain":12,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
   };
+
+  /* Video Reel is the only preset that also starts the background film. */
+  const PRESET_VIDEO = new Set(['video-reel']);
 
   const ensureSpin = (want) => { if (spinOn !== want) $('spinBtn').click(); };
   const ensureCrt = (want) => { if (crtOn !== want) $('crtBtn').click(); };
   const ensureGlow = (want) => { if (glowOn !== want) $('glowBtn').click(); };
   const ensureXerox = (want) => { if (xeroxOn !== want) $('xeroxBtn').click(); };
+
   const setRange = (id, value) => {
     const el = $(id);
     const next = String(value);
@@ -1310,99 +1292,23 @@
     syncHex(el);
   };
 
-  document.querySelectorAll('[data-preset]').forEach((button) => button.addEventListener('click', () => {
-    const def = PRESETS[button.dataset.preset];
-    if (!def) return;
-    document.querySelectorAll('.fmt')[def.fmt].click();
-
-    if (def.video) {
+  function applyPreset(name) {
+    const cfg = PRESETS[name];
+    if (!cfg) return false;
+    if (PRESET_VIDEO.has(name)) {
       bgVid.src = './bg-reel.mp4';
       bgVid.style.display = 'block';
       bgVid.play().catch(() => { $('threeStatus').textContent = 'Background video could not play. Choose another video.'; });
     } else {
       $('clearBgBtn').click();
     }
-    selectSwatch(document.querySelectorAll('.swatch-btn')[def.swatch]);
+    const result = applyConfig(cfg);
+    if (!result.ok) console.warn('Preset could not be applied', name, result);
+    return result.ok;
+  }
 
-    if (def.angle !== undefined) setRange('angleSlider', def.angle);
-    setRange('rough3d', def.rough ?? 20);
-    setRange('irid3d', def.iridescence ?? 85);
-    setRange('depthSlider', def.depth ?? 10);
-    setRange('bevel3d', def.bevel ?? 2);
-    setRange('speed3d', def.speed ?? 10);
-    setHex('flat3d', def.flat ?? '#eceef1');
-    if (def.surfaceFill) {
-      $('surfaceFill').value = def.surfaceFill;
-      $('surfaceFill').dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (def.surfaceTexture) {
-      $('surfaceTexture').value = def.surfaceTexture;
-      $('surfaceTexture').dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (def.flip) {
-      $('flipPalette').value = def.flip;
-      $('flipPalette').dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    $('flipOrder').value = def.flipOrder || 'reading';
-    $('flipOrder').dispatchEvent(new Event('change', { bubbles: true }));
-    $('rotationMode').value = def.rotation || 'yspin';
-    $('rotationMode').dispatchEvent(new Event('change', { bubbles: true }));
-    if (def.arrangement) {
-      const arrangement = $('arrangement3d');
-      arrangement.value = def.arrangement;
-      arrangement.dispatchEvent(new Event('change'));
-    }
-    const axis = def.axis || 'horizontal';
-    $('carouselAxis').value = axis;
-    $('carouselAxis').dispatchEvent(new Event('change'));
-    setRange('liquidTwist', def.twist ?? 0);
-    setRange('carouselRadius', def.radius ?? 4);
-    setRange('letterScale', def.letter ?? 1.6);
-    setRange('scaleSlider', def.scale ?? 55);
-    logoLayer.style.left = `${(def.position ?? [50,50])[0]}%`;
-    logoLayer.style.top = `${(def.position ?? [50,50])[1]}%`;
-
-    ensureSpin(def.spin);
-    ensureCrt(!!def.crt);
-
-    const shader = $('paperShader');
-    shader.value = def.shader;
-    shader.dispatchEvent(new Event('change', { bubbles: true }));
-
-    if (def.xerox) {
-      ensureXerox(def.xerox.on);
-      $('paperBlend').value = def.xerox.blend;
-      $('paperBlend').dispatchEvent(new Event('change', { bubbles: true }));
-      setRange('paperOpacity', def.xerox.opacity);
-    } else {
-      ensureXerox(false);
-    }
-
-    glowColor.value = '#ffffff';
-    glowSlider.value = String(def.glowPx ?? 7);
-    applyShaders();
-    ensureGlow(!!def.glow);
-
-    if (iridOn) $('iridBtn').click();
-    setRange('noiseSlider', def.noise);
-    setPrint('off');
-
-    $('posterFps').value = String(def.poster ?? 0);
-    $('posterFps').dispatchEvent(new Event('change', { bubbles: true }));
-
-    setRange('inkBleed', def.bleed ?? 0);
-
-    if (def.grid) {
-      if (!gridOn) $('gridBtn').click();
-      setRange('gridStrength', def.grid.strength);
-    } else {
-      if (gridOn) $('gridBtn').click();
-    }
-
-    syncSurfaceControls();
-    repaintBg();
-    sync3d();
-    syncShaderVisibility();
+  document.querySelectorAll('[data-preset]').forEach((button) => button.addEventListener('click', () => {
+    applyPreset(button.dataset.preset);
   }));
 
   /* ---- config, saved presets and WebMCP ---------------------------------- */
@@ -2561,6 +2467,8 @@
   paintGrainPreview();
   window.__tb3d?.setPosterFps?.(Number($('posterFps').value) || 0);
   syncShaderVisibility();
+  /* Boot into the approved default look: Chrome Spin, 3D already running. */
+  applyPreset('chrome-spin');
   /* Export length starts at the spin length, then belongs to the user. */
   reelLength.value = String(Math.min(15, Math.max(2, Number($('speed3d').value) || 6)));
   showReelLength();

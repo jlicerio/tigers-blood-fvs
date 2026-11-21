@@ -65,7 +65,8 @@ let stippleTexture, grainTexture, gradientTexture;
 let paletteMaterials = [], multiOffset = 0;
 let risoSeq = [], risoSeqKey = '', risoOverride = null, risoStepPos = 0, risoOrderSeed = 0;
 const RISO_PALETTES = {
-  multi: ['#f5f2e8', '#e11d48', '#1d4ed8', '#facc15', '#10b981', '#111111'],
+  /* Deep ink, not cream: the cream entry vanished on light paper. */
+  multi: ['#141414', '#e11d48', '#1d4ed8', '#facc15', '#10b981', '#111111'],
   tiger: ['#f5f2e8', '#c8102e', '#111111', '#a1a1aa'],
   mono: ['#f5f2e8'],
   'pw-cyan-gold': ['#5bc0de', '#e5b84b', '#9fb344', '#141414'],
