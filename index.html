@@ -334,6 +334,9 @@
   #threeStatus:empty { display: none; }
   .presets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp1); }
   .presets button { min-height: 34px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .preset-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px; min-width: 0; }
+  .preset-custom > button:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .preset-custom .preset-x { min-width: 30px; padding: 0 6px; }
 
   .foot-note {
     padding: var(--sp3) var(--sp4); color: var(--muted); font-size: 12px;
@@ -436,7 +439,7 @@
       <details class="sec" open>
         <summary>Presets<span class="hint">6</span></summary>
         <div class="sec-body">
-          <div class="presets">
+          <div class="presets" id="presetGrid">
             <button data-preset="chrome-spin">Chrome Spin</button>
             <button data-preset="video-reel">Video Reel</button>
             <button data-preset="riso-flipbook">Riso Flipbook</button>
@@ -444,7 +447,11 @@
             <button data-preset="yeso-dither">Yeso Dither</button>
             <button data-preset="twilight-chrome">Twilight Chrome</button>
           </div>
-          <p class="note">A preset sets format, palette, 3D, logo effect and effects together.</p>
+          <div class="row">
+            <button id="copyConfigBtn" type="button" class="ghost">Copy config</button>
+            <button id="savePresetBtn" type="button" class="ghost">Save preset</button>
+          </div>
+          <p class="note">A preset sets format, palette, 3D, logo effect and effects together. Saved presets stay in this browser.</p>
         </div>
       </details>
 
@@ -1270,6 +1277,267 @@
     sync3d();
     syncShaderVisibility();
   }));
+
+  /* ---- config, saved presets and WebMCP ---------------------------------- */
+  const PRESET_KEY = 'tb.customPresets.v1';
+
+  function getConfig() {
+    return {
+      version: 1,
+      format: [...document.querySelectorAll('.fmt')].findIndex((b) => b.classList.contains('active')),
+      bgMode,
+      bgColors: [bgColor1.value, bgColor2.value, bgColor3.value],
+      bgAngle: Number(angleSlider.value),
+      bgNoise: Number($('bgNoise').value),
+      bgRadial: { cx: Number($('bgCx').value), cy: Number($('bgCy').value), radius: Number($('bgRadius').value) },
+      mediaFit: $('bgFit').value,
+      mediaOpacity: Number($('bgOpacity').value),
+      threeActive: spinOn,
+      arrangement: $('arrangement3d').value,
+      material: $('material3d').value,
+      flatColor: $('flat3d').value,
+      bevel: Number($('bevel3d').value),
+      roughness: Number($('rough3d').value),
+      iridescence: Number($('irid3d').value),
+      twist: Number($('liquidTwist').value),
+      fps: Number($('posterFps').value),
+      carouselAxis: $('carouselAxis').value,
+      carouselRadius: Number($('carouselRadius').value),
+      letterScale: Number($('letterScale').value),
+      flipbookPalette: $('flipPalette').value,
+      flipbookJitter: Number($('flipJitter').value),
+      glow: glowOn,
+      glowColor: glowColor.value,
+      glowPx: Number(glowSlider.value),
+      grain: Number(noiseSlider.value),
+      xerox: xeroxOn,
+      xeroxBlend: $('paperBlend').value,
+      xeroxOpacity: Number($('paperOpacity').value),
+      inkBleed: Number($('inkBleed').value),
+      newsprintGrid: gridOn,
+      gridStrength: Number($('gridStrength').value),
+      crt: crtOn,
+      paperShader: $('paperShader').value,
+      shaderSize: Number($('shaderSize').value),
+      invertMark,
+      print: printMode,
+    };
+  }
+
+  function applyConfig(cfg) {
+    if (!cfg || typeof cfg !== 'object') return { ok: false, reason: 'config must be an object' };
+    const applied = [];
+    const has = (key) => Object.hasOwn(cfg, key);
+    const num = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+    const text = (value) => (typeof value === 'string' ? value.slice(0, 40) : '');
+
+    if (has('format')) {
+      const index = Math.max(0, Math.min(3, Math.round(num(cfg.format, 0))));
+      document.querySelectorAll('.fmt')[index].click();
+      applied.push('format');
+    }
+    if (has('bgMode')) {
+      const mode = ['solid', 'linear', 'radial', 'mesh'].includes(cfg.bgMode) ? cfg.bgMode : 'solid';
+      bgMode = mode; applyBg(); applied.push('bgMode');
+    }
+    if (Array.isArray(cfg.bgColors)) {
+      ['bgColor1', 'bgColor2', 'bgColor3'].forEach((id, i) => {
+        const value = cfg.bgColors[i];
+        if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) { $(id).value = value; $(id).dispatchEvent(new Event('input', { bubbles: true })); }
+      });
+      applied.push('bgColors');
+    }
+    if (has('bgAngle')) { setRange('angleSlider', Math.max(0, Math.min(360, num(cfg.bgAngle, 135)))); applied.push('bgAngle'); }
+    if (has('bgNoise')) { setRange('bgNoise', Math.max(0, Math.min(100, num(cfg.bgNoise, 0)))); applied.push('bgNoise'); }
+    if (cfg.bgRadial && typeof cfg.bgRadial === 'object') {
+      setRange('bgCx', Math.max(0, Math.min(100, num(cfg.bgRadial.cx, 50))));
+      setRange('bgCy', Math.max(0, Math.min(100, num(cfg.bgRadial.cy, 50))));
+      setRange('bgRadius', Math.max(10, Math.min(120, num(cfg.bgRadial.radius, 65))));
+      applied.push('bgRadial');
+    }
+    if (has('mediaFit')) { $('bgFit').value = ['cover', 'contain', 'fill'].includes(cfg.mediaFit) ? cfg.mediaFit : 'cover'; $('bgFit').dispatchEvent(new Event('change', { bubbles: true })); applied.push('mediaFit'); }
+    if (has('mediaOpacity')) { setRange('bgOpacity', Math.max(0, Math.min(100, num(cfg.mediaOpacity, 100)))); applied.push('mediaOpacity'); }
+
+    if (has('arrangement') && ['lockup', 'carousel', 'riso'].includes(cfg.arrangement)) {
+      const el = $('arrangement3d'); el.value = cfg.arrangement; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('arrangement');
+    }
+    if (has('material')) {
+      const el = $('material3d'); el.value = ['iridescent', 'silver', 'flat', 'video'].includes(cfg.material) ? cfg.material : 'iridescent';
+      el.dispatchEvent(new Event('input', { bubbles: true })); applied.push('material');
+    }
+    if (has('flatColor') && /^#[0-9a-f]{6}$/i.test(cfg.flatColor)) { $('flat3d').value = cfg.flatColor; $('flat3d').dispatchEvent(new Event('input', { bubbles: true })); applied.push('flatColor'); }
+    for (const [key, id, min, max, fallback] of [
+      ['bevel', 'bevel3d', 0, 8, 3], ['roughness', 'rough3d', 0, 100, 15], ['iridescence', 'irid3d', 0, 100, 100],
+      ['twist', 'liquidTwist', 0, 100, 0], ['carouselRadius', 'carouselRadius', 2, 8, 4],
+      ['letterScale', 'letterScale', 0.5, 4, 2], ['flipbookJitter', 'flipJitter', 0, 100, 35],
+      ['glowPx', 'glowSlider', 4, 48, 7], ['grain', 'noiseSlider', 0, 100, 0],
+      ['xeroxOpacity', 'paperOpacity', 0, 100, 70], ['inkBleed', 'inkBleed', 0, 100, 0],
+      ['gridStrength', 'gridStrength', 0, 100, 35], ['shaderSize', 'shaderSize', 50, 200, 100],
+    ]) {
+      if (has(key)) { setRange(id, Math.max(min, Math.min(max, num(cfg[key], fallback)))); applied.push(key); }
+    }
+    if (has('fps')) { const el = $('posterFps'); el.value = String([0, 12, 8].includes(num(cfg.fps, 0)) ? num(cfg.fps, 0) : 0); el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('fps'); }
+    if (has('carouselAxis')) { const el = $('carouselAxis'); el.value = ['horizontal', 'vertical'].includes(cfg.carouselAxis) ? cfg.carouselAxis : 'horizontal'; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('carouselAxis'); }
+    if (has('flipbookPalette')) {
+      const el = $('flipPalette');
+      const ok = [...el.options].some((o) => o.value === cfg.flipbookPalette);
+      if (ok) { el.value = cfg.flipbookPalette; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('flipbookPalette'); }
+    }
+    if (has('paperShader')) {
+      const el = $('paperShader');
+      const ok = [...el.options].some((o) => o.value === cfg.paperShader);
+      if (ok) { el.value = cfg.paperShader; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('paperShader'); }
+    }
+    if (has('glowColor') && /^#[0-9a-f]{6}$/i.test(cfg.glowColor)) { glowColor.value = cfg.glowColor; applyShaders(); applied.push('glowColor'); }
+    if (has('xeroxBlend')) {
+      const el = $('paperBlend');
+      if (['multiply', 'screen', 'overlay', 'soft-light'].includes(cfg.xeroxBlend)) { el.value = cfg.xeroxBlend; el.dispatchEvent(new Event('change', { bubbles: true })); applied.push('xeroxBlend'); }
+    }
+    if (has('threeActive')) { ensureSpin(!!cfg.threeActive); applied.push('threeActive'); }
+    if (has('glow')) { ensureGlow(!!cfg.glow); applied.push('glow'); }
+    if (has('xerox')) { ensureXerox(!!cfg.xerox); applied.push('xerox'); }
+    if (has('newsprintGrid')) { if (gridOn !== !!cfg.newsprintGrid) $('gridBtn').click(); applied.push('newsprintGrid'); }
+    if (has('crt')) { ensureCrt(!!cfg.crt); applied.push('crt'); }
+    if (has('invertMark')) {
+      if (invertMark !== !!cfg.invertMark) $('invertBtn').click();
+      applied.push('invertMark');
+    }
+    if (has('print')) {
+      const mode = ['off', 'dither', 'halftone'].includes(cfg.print) ? cfg.print : 'off';
+      setPrint(mode); applied.push('print');
+    }
+    applyShaders();
+    repaintBg();
+    sync3d();
+    syncShaderVisibility();
+    syncFlipPalette();
+    return { ok: true, applied };
+  }
+
+  function readCustomPresets() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PRESET_KEY) || '[]');
+      return Array.isArray(raw) ? raw.filter((p) => p && typeof p.name === 'string' && p.config) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+  function writeCustomPresets(list) {
+    try { localStorage.setItem(PRESET_KEY, JSON.stringify(list)); } catch (error) { console.warn('Preset storage unavailable', error); }
+  }
+
+  const presetGrid = $('presetGrid');
+  function renderCustomPresets() {
+    for (const old of [...presetGrid.querySelectorAll('[data-custom]')]) old.remove();
+    for (const preset of readCustomPresets()) {
+      const wrap = document.createElement('div');
+      wrap.className = 'preset-custom';
+      wrap.dataset.custom = '1';
+      const run = document.createElement('button');
+      run.type = 'button';
+      run.textContent = preset.name;
+      run.title = `Apply saved preset: ${preset.name}`;
+      run.addEventListener('click', () => {
+        const result = applyConfig(preset.config);
+        if (!result.ok) console.warn('Preset could not be applied', result);
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'preset-x ghost';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Delete saved preset ${preset.name}`);
+      remove.addEventListener('click', () => {
+        if (!window.confirm(`Delete saved preset “${preset.name}”?`)) return;
+        writeCustomPresets(readCustomPresets().filter((p) => p.name !== preset.name));
+        renderCustomPresets();
+      });
+      wrap.append(run, remove);
+      presetGrid.append(wrap);
+    }
+  }
+
+  function savePreset(name) {
+    const clean = String(name || '').trim().slice(0, 32);
+    if (!clean) return { ok: false, reason: 'name required' };
+    const list = readCustomPresets().filter((p) => p.name !== clean);
+    list.push({ name: clean, config: getConfig(), savedAt: new Date().toISOString() });
+    writeCustomPresets(list);
+    renderCustomPresets();
+    return { ok: true, name: clean, count: list.length };
+  }
+
+  $('copyConfigBtn').addEventListener('click', async () => {
+    const button = $('copyConfigBtn');
+    const text = JSON.stringify(getConfig(), null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = 'Copied';
+    } catch (error) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      document.body.append(area);
+      area.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      area.remove();
+      button.textContent = ok ? 'Copied' : 'Copy failed';
+    }
+    window.setTimeout(() => { button.textContent = 'Copy config'; }, 1200);
+  });
+
+  $('savePresetBtn').addEventListener('click', () => {
+    const name = window.prompt('Name this preset', 'My preset');
+    if (name === null) return;
+    const result = savePreset(name);
+    if (!result.ok) { $('savePresetBtn').textContent = 'Name required'; window.setTimeout(() => { $('savePresetBtn').textContent = 'Save preset'; }, 1200); }
+  });
+
+  renderCustomPresets();
+
+  /* ---- WebMCP ------------------------------------------------------------ */
+  const mcpTools = [
+    {
+      name: 'get_config',
+      description: 'Read every current Tiger’s Blood studio setting as one JSON object.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({ content: [{ type: 'text', text: JSON.stringify(getConfig(), null, 2) }] }),
+    },
+    {
+      name: 'apply_config',
+      description: 'Apply a studio config object live. Accepts the shape returned by get_config; unknown keys are ignored.',
+      inputSchema: {
+        type: 'object',
+        properties: { config: { type: 'object', description: 'Partial or full config from get_config.' } },
+        required: ['config'],
+        additionalProperties: false,
+      },
+      execute: async ({ config } = {}) => ({ content: [{ type: 'text', text: JSON.stringify(applyConfig(config)) }] }),
+    },
+    {
+      name: 'save_preset',
+      description: 'Save the current studio config as a custom preset button in the Presets drawer.',
+      inputSchema: {
+        type: 'object',
+        properties: { name: { type: 'string', description: 'Short preset name.' } },
+        required: ['name'],
+        additionalProperties: false,
+      },
+      execute: async ({ name } = {}) => ({ content: [{ type: 'text', text: JSON.stringify(savePreset(name)) }] }),
+    },
+  ];
+  if (navigator.modelContext && typeof navigator.modelContext.registerTool === 'function') {
+    for (const entry of mcpTools) {
+      try { navigator.modelContext.registerTool(entry); }
+      catch (error) { console.warn(`WebMCP tool ${entry.name} refused`, error); }
+    }
+  }
+  window.__tbWebMcp = {
+    getConfig,
+    applyConfig,
+    savePreset,
+    presets: () => readCustomPresets().map((p) => p.name),
+    tools: mcpTools.map((t) => t.name),
+    registered: !!(navigator.modelContext && typeof navigator.modelContext.registerTool === 'function'),
+  };
 
   /* ---- mark placement --------------------------------------------------- */
   document.querySelectorAll(".snap").forEach((btn) => {
