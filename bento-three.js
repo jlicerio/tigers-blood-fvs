@@ -31,6 +31,7 @@ function applyRotation() {
   if (risoMode || mode === 'still') { pivot.rotation.set(0, 0, 0); return; }
   if (mode === 'forward-cw') { pivot.rotation.set(0, 0, -angle); return; }
   if (mode === 'forward-ccw') { pivot.rotation.set(0, 0, angle); return; }
+  if (mode === 'iso-ccw') { pivot.rotation.set(0.42, -0.36, angle); return; }
   const vertical = $('arrangement3d').value === 'carousel' && $('carouselAxis').value === 'vertical';
   pivot.rotation.set(vertical ? -angle : 0, vertical ? 0 : -angle, 0);
 }
