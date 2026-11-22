@@ -334,7 +334,7 @@
   #threeStatus:empty { display: none; }
   .presets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp1); }
   .presets button { min-height: 34px; text-transform: none; letter-spacing: 0; font-size: 12px; }
-  .preset-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px; min-width: 0; }
+  .preset-custom { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px; min-width: 0; }
   .preset-custom > button:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .preset-custom .preset-x { min-width: 30px; padding: 0 6px; }
 
@@ -430,14 +430,14 @@
         </div>
         <div class="frame-meta">
           <span><b id="frameSize">280 × 350</b> · <span id="frameRatio">4:5</span></span>
-          <span class="tag">PNG · 2D only</span>
+          <span class="tag">PNG · frame</span>
         </div>
       </div>
     </div>
 
     <aside class="inspector" aria-label="Inspector">
       <details class="sec" open>
-        <summary>Presets<span class="hint">6</span></summary>
+        <summary>Presets<span class="hint" id="presetCount">6</span></summary>
         <div class="sec-body">
           <div class="presets" id="presetGrid">
             <button data-preset="chrome-spin">Chrome Spin</button>
@@ -445,7 +445,7 @@
             <button data-preset="riso-flipbook">Riso Flipbook</button>
             <button data-preset="zine-negative">Zine Negative</button>
             <button data-preset="yeso-dither">Yeso Dither</button>
-            <button data-preset="twilight-chrome">Twilight Chrome</button>
+            <button data-preset="neon-glow">Neon Glow</button>
           </div>
           <div class="row">
             <button id="copyConfigBtn" type="button" class="ghost">Copy config</button>
@@ -630,6 +630,7 @@
                 <option value="solid">Solid</option>
                 <option value="multi">Multi-colour</option>
                 <option value="gradient">Gradient</option>
+                <option value="neon">Neon outline</option>
                 <option value="video">Video</option>
               </select>
               <b></b>
@@ -897,7 +898,7 @@
         </div>
       </details>
 
-      <div class="foot-note">PNG export is 2D only. The MP4 reel records whatever the preview shows, including 3D.</div>
+      <div class="foot-note">PNG export records one frame, 2D or 3D. The MP4 reel records the whole spin.</div>
     </aside>
   </div>
 
@@ -950,18 +951,17 @@
     grainTile = tile;
   }
 
-  /* k = output pixels per CSS pixel, so the grain stays the same physical
-     size in the preview, the PNG and the MP4. */
-  function paintFilmGrain(ctx, w, h, amount, k, blend = 'source-over') {
+  /* One tile pixel is one output pixel: no magnification, so Retina preview
+     and a 3-4x export stay true micro-grain instead of k x k blocks. */
+  function paintFilmGrain(ctx, w, h, amount, blend = 'source-over') {
     if (!(amount > 0) || !w || !h) return false;
     if (!grainTile) buildGrainTile();
     ctx.save();
     ctx.globalCompositeOperation = blend;
     ctx.globalAlpha = Math.min(1, amount) * 0.45;
     ctx.imageSmoothingEnabled = false;
-    ctx.scale(Math.max(0.5, k), Math.max(0.5, k));
     ctx.fillStyle = ctx.createPattern(grainTile, 'repeat');
-    ctx.fillRect(0, 0, w / k, h / k);
+    ctx.fillRect(0, 0, w, h);
     ctx.restore();
     return true;
   }
@@ -974,7 +974,7 @@
     if (noiseCanvas.width !== pw || noiseCanvas.height !== ph) { noiseCanvas.width = pw; noiseCanvas.height = ph; }
     nctx.setTransform(1, 0, 0, 1, 0, 0);
     nctx.clearRect(0, 0, pw, ph);
-    paintFilmGrain(nctx, pw, ph, Number(noiseSlider.value) / 100, dpr);
+    paintFilmGrain(nctx, pw, ph, Number(noiseSlider.value) / 100);
   }
   const crtOverlay = $("crtOverlay");
   const scaleSlider = $("scaleSlider");
@@ -1021,7 +1021,6 @@
   function paintBgNoise(ctx, w, h, amount) {
     if (amount <= 0) return;
     if (!bgNoiseTile) buildBgNoiseTile();
-    const k = Math.max(1, w / (frame.clientWidth || w));
     /* A wash needs the opposite blend on each ground: lighten a dark field,
        darken a light one, so the same control reads on both. */
     const field = [bgColor1.value, bgColor2.value, bgColor3.value]
@@ -1033,12 +1032,10 @@
     ctx.save();
     ctx.globalCompositeOperation = field > 0.5 ? 'multiply' : 'screen';
     ctx.globalAlpha = (amount / 100) * 0.5;
-    /* Tile at design scale, so the wash stays grain in the preview and in a
-       4x export instead of becoming blurred blocks. */
+    /* Native 1:1 tile: a wash of individual pixels at any output size. */
     ctx.imageSmoothingEnabled = false;
-    ctx.scale(k, k);
     ctx.fillStyle = ctx.createPattern(bgNoiseTile, 'repeat');
-    ctx.fillRect(0, 0, w / k, h / k);
+    ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
 
@@ -1262,8 +1259,8 @@
     'video-reel': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":70,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"carousel","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":8,"grain":100,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":100,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":true,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
     'riso-flipbook': {"version":1,"format":0,"bgMode":"solid","bgColors":["#f5f5f5","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"riso","rotation":"still","surfaceFill":"multi","surfaceTexture":"grain","material":"flat","flatColor":"#f5f2e8","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":8,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":14,"grain":73,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":41,"inkBleed":56,"newsprintGrid":false,"gridStrength":40,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":false,"print":"off"},
     'zine-negative': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":98,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"riso","rotation":"still","surfaceFill":"multi","surfaceTexture":"grain","material":"flat","flatColor":"#f5f2e8","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":55,"fps":8,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"mono","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":5,"grain":0,"xerox":true,"xeroxBlend":"multiply","xeroxOpacity":35,"inkBleed":71,"newsprintGrid":true,"gridStrength":40,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
-    'yeso-dither': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":12,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":false,"glowColor":"#ffffff","glowPx":7,"grain":0,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"dither","shaderSize":100,"invertMark":true,"print":"off"},
-    'twilight-chrome': {"version":1,"format":2,"bgMode":"linear","bgColors":["#151b2c","#404256","#22252b"],"bgAngle":135,"bgNoise":0,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"yspin","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":20,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ffffff","glowPx":7,"grain":12,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
+    'yeso-dither': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":25,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"forward-cw","surfaceFill":"chrome","surfaceTexture":"smooth","material":"iridescent","flatColor":"#eceef1","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":12,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":false,"glowColor":"#ffffff","glowPx":4,"grain":75,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":45,"newsprintGrid":false,"gridStrength":100,"crt":true,"paperShader":"dither","shaderSize":100,"invertMark":true,"print":"off"},
+    'neon-glow': {"version":1,"format":0,"bgMode":"solid","bgColors":["#0a0a0a","#0a0a0a","#22252b"],"bgAngle":135,"bgNoise":20,"bgRadial":{"cx":50,"cy":50,"radius":65},"mediaFit":"cover","mediaOpacity":100,"threeActive":true,"arrangement":"lockup","rotation":"forward-ccw","surfaceFill":"neon","surfaceTexture":"smooth","material":"flat","flatColor":"#ff1e3c","flatColor2":"#e11d48","videoOpacity":100,"bevel":2,"roughness":20,"iridescence":85,"twist":0,"fps":0,"carouselAxis":"horizontal","carouselRadius":4,"letterScale":1.6,"flipbookPalette":"multi","flipbookJitter":35,"flipbookOrder":"reading","colourShuffle":0,"glow":true,"glowColor":"#ff1e3c","glowPx":14,"grain":18,"xerox":false,"xeroxBlend":"multiply","xeroxOpacity":70,"inkBleed":0,"newsprintGrid":false,"gridStrength":35,"crt":false,"paperShader":"off","shaderSize":100,"invertMark":true,"print":"off"},
   };
 
   /* Video Reel is the only preset that also starts the background film. */
@@ -1303,7 +1300,8 @@
       $('clearBgBtn').click();
     }
     const result = applyConfig(cfg);
-    if (!result.ok) console.warn('Preset could not be applied', name, result);
+    if (result.ok) setPresetActive(document.querySelector(`[data-preset="${name}"]`));
+    else console.warn('Preset could not be applied', name, result);
     return result.ok;
   }
 
@@ -1313,6 +1311,10 @@
 
   /* ---- config, saved presets and WebMCP ---------------------------------- */
   const PRESET_KEY = 'tb.customPresets.v1';
+  const PRESET_COOKIE = 'tb_custom_presets';
+  /* Cookies cap near 4 KB; keep the encoded value well below it. */
+  const COOKIE_BUDGET = 3800;
+  const COOKIE_MAX_AGE = 31536000;
   let multiShuffle = 0;
 
   /* The legacy `material` key is derived from the surface fill, so a config
@@ -1421,7 +1423,7 @@
     if (has('surfaceFill') || has('material')) {
       const fill = $('surfaceFill');
       let value = cfg.surfaceFill;
-      if (!['chrome', 'solid', 'multi', 'gradient', 'video'].includes(value)) {
+      if (!['chrome', 'solid', 'multi', 'gradient', 'neon', 'video'].includes(value)) {
         value = ({ iridescent: 'chrome', silver: 'chrome', flat: 'solid', video: 'video' })[cfg.material] || 'chrome';
         if (!has('iridescence') && cfg.material === 'silver') setRange('irid3d', 0);
         if (!has('iridescence') && cfg.material === 'iridescent') setRange('irid3d', 100);
@@ -1500,22 +1502,82 @@
     return { ok: true, applied };
   }
 
+  function cleanPresets(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((p) => p && typeof p.name === 'string' && p.name.trim() && p.config && typeof p.config === 'object')
+      .map((p) => ({ name: p.name.slice(0, 32), config: p.config, savedAt: p.savedAt || '' }));
+  }
+
+  function readCookie(name) {
+    const hit = document.cookie.split('; ').find((part) => part.startsWith(name + '='));
+    if (!hit) return '';
+    try { return decodeURIComponent(hit.slice(name.length + 1)); } catch (error) { return ''; }
+  }
+
+  /* Write the newest presets that fit the cookie budget. Older ones are
+     dropped from the cookie only; localStorage keeps the full list. */
+  function writePresetCookie(list) {
+    if (!list.length) {
+      document.cookie = `${PRESET_COOKIE}=; SameSite=Lax; max-age=0; path=/`;
+      return 'cleared';
+    }
+    const fitting = [...list];
+    while (fitting.length) {
+      const value = encodeURIComponent(JSON.stringify(fitting));
+      if (value.length <= COOKIE_BUDGET) {
+        document.cookie = `${PRESET_COOKIE}=${value}; SameSite=Lax; max-age=${COOKIE_MAX_AGE}; path=/`;
+        return fitting.length === list.length ? 'full' : 'trimmed';
+      }
+      if (fitting.length === 1) break;
+      fitting.shift();
+    }
+    return 'skipped';
+  }
+
   function readCustomPresets() {
     try {
-      const raw = JSON.parse(localStorage.getItem(PRESET_KEY) || '[]');
-      return Array.isArray(raw) ? raw.filter((p) => p && typeof p.name === 'string' && p.config) : [];
+      const list = cleanPresets(JSON.parse(localStorage.getItem(PRESET_KEY) || '[]'));
+      if (list.length) return list;
+    } catch (error) { /* fall through to the cookie copy */ }
+    try {
+      const list = cleanPresets(JSON.parse(readCookie(PRESET_COOKIE) || '[]'));
+      if (list.length) {
+        /* Heal a lost or blocked localStorage from the cookie. */
+        try { localStorage.setItem(PRESET_KEY, JSON.stringify(list)); } catch (error) { /* cookie only */ }
+      }
+      return list;
     } catch (error) {
       return [];
     }
   }
+
   function writeCustomPresets(list) {
-    try { localStorage.setItem(PRESET_KEY, JSON.stringify(list)); } catch (error) { console.warn('Preset storage unavailable', error); }
+    const clean = cleanPresets(list);
+    let local = true;
+    try { localStorage.setItem(PRESET_KEY, JSON.stringify(clean)); }
+    catch (error) { local = false; console.warn('Preset storage unavailable', error); }
+    const cookie = writePresetCookie(clean);
+    return { local, cookie };
   }
 
   const presetGrid = $('presetGrid');
-  function renderCustomPresets() {
+
+  /* One active state for built-in and saved presets alike. */
+  function setPresetActive(button) {
+    for (const candidate of presetGrid.querySelectorAll('[data-preset], .preset-custom > button:first-child')) {
+      const on = candidate === button;
+      candidate.classList.toggle('active', on);
+      candidate.setAttribute('aria-pressed', String(on));
+    }
+  }
+
+  function renderCustomPresets(activeName = '') {
     for (const old of [...presetGrid.querySelectorAll('[data-custom]')]) old.remove();
-    for (const preset of readCustomPresets()) {
+    const list = readCustomPresets();
+    const count = $('presetCount');
+    if (count) count.textContent = String(presetGrid.querySelectorAll('[data-preset]').length + list.length);
+    for (const preset of list) {
       const wrap = document.createElement('div');
       wrap.className = 'preset-custom';
       wrap.dataset.custom = '1';
@@ -1523,9 +1585,11 @@
       run.type = 'button';
       run.textContent = preset.name;
       run.title = `Apply saved preset: ${preset.name}`;
+      run.setAttribute('aria-pressed', 'false');
       run.addEventListener('click', () => {
         const result = applyConfig(preset.config);
-        if (!result.ok) console.warn('Preset could not be applied', result);
+        if (result.ok) setPresetActive(run);
+        else console.warn('Preset could not be applied', result);
       });
       const remove = document.createElement('button');
       remove.type = 'button';
@@ -1539,6 +1603,7 @@
       });
       wrap.append(run, remove);
       presetGrid.append(wrap);
+      if (preset.name === activeName) setPresetActive(run);
     }
   }
 
@@ -1547,9 +1612,9 @@
     if (!clean) return { ok: false, reason: 'name required' };
     const list = readCustomPresets().filter((p) => p.name !== clean);
     list.push({ name: clean, config: getConfig(), savedAt: new Date().toISOString() });
-    writeCustomPresets(list);
-    renderCustomPresets();
-    return { ok: true, name: clean, count: list.length };
+    const stored = writeCustomPresets(list);
+    renderCustomPresets(clean);
+    return { ok: true, name: clean, count: list.length, storage: stored };
   }
 
   $('copyConfigBtn').addEventListener('click', async () => {
@@ -2251,7 +2316,7 @@
 
     const grain = Number(noiseSlider.value);
     /* Overlay on export; the preview lets CSS blend the same tile. */
-    paintFilmGrain(ctx, w, h, grain / 100, w / (frame.clientWidth || w), 'overlay');
+    paintFilmGrain(ctx, w, h, grain / 100, 'overlay');
     if (crt && crtOn) ctx.drawImage(crtLayerFor(w, h), 0, 0, w, h);
     if (xeroxOn) {
       ctx.save();
@@ -2263,15 +2328,26 @@
     if (print && printMode !== 'off') ctx.drawImage(printCanvas, 0, 0, w, h);
   }
 
-  /* PNG: 2D still at 4× the frame. */
+  /* PNG: one still at 4x the frame, 2D or the current 3D phase. */
   $("exportBtn").addEventListener("click", () => {
-    if (spinOn) { alert("PNG export supports the 2D mark only. Switch off 3D preview to export."); return; }
     if (recordState) return;
     const w = parseInt(frame.style.width) * 4, h = parseInt(frame.style.height) * 4;
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
-    drawFrame(ctx, w, h);
+    try {
+      if (spinOn) {
+        window.__tb3d?.beginExportCapture?.(w, h);
+        window.paperLayer?.setCaptureSize?.(w, h);
+        /* Draw the locked phase at full export size. */
+        window.__tb3d?.renderPhaseFrame?.();
+        window.paperLayer?.render3d?.();
+      }
+      drawFrame(ctx, w, h);
+    } finally {
+      window.paperLayer?.setCaptureSize?.(0, 0);
+      if (spinOn) window.__tb3d?.endExportCapture?.();
+    }
     const a = document.createElement("a");
     a.download = "tigersblood-fvs-studio.png";
     a.href = canvas.toDataURL("image/png");
@@ -2280,8 +2356,12 @@
 
   /* ---- MP4 reel --------------------------------------------------------- */
   const REEL_SIZES = [[280, 350, 864, 1080], [225, 400, 720, 1280], [420, 236, 1280, 720], [260, 336, 864, 1118]];
-  const REEL_TYPES = ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4',
+  const REEL_TYPES = ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1.64002A',
+    'video/mp4;codecs=avc1.4D4028', 'video/mp4;codecs=avc1.42E01E',
+    'video/mp4;codecs=avc1', 'video/mp4',
     'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  /* 18 Mbps keeps grain, dither and chrome bevels out of macroblocks. */
+  const REEL_BITRATE = 18000000;
   const reelButton = $('exportReelBtn');
   let recordState = null;
 
@@ -2363,8 +2443,7 @@
         stream = canvas.captureStream(30);
         track = null;
       }
-      const bitrate = Math.round(Math.min(8e6, Math.max(2e6, width * height * 30 * 0.07)));
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: bitrate });
+      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: REEL_BITRATE });
     } catch (error) {
       alert('This browser refused the recording format: ' + (error && error.message ? error.message : 'unknown error'));
       return;
@@ -2380,6 +2459,9 @@
     $('exportBtn').disabled = true;
 
     recorder.start(250);
+    /* The 3D canvas matches the export pixels, so nothing is upscaled. */
+    if (spinOn) window.__tb3d?.beginExportCapture?.(width, height);
+    window.paperLayer?.setCaptureSize?.(width, height);
     window.paperLayer?.beginCapture();
     const fps = 30;
     const totalFrames = Math.max(1, Math.round(seconds * fps));
@@ -2411,18 +2493,23 @@
       }
       timer = window.setTimeout(step, 1000 / fps);
     };
-    step();
 
-    await stopped;
-    clearTimeout(timer);
-    if (window.__tb3d && window.__tb3d.releasePhase) window.__tb3d.releasePhase();
-    window.paperLayer?.endCapture();
-    for (const track of stream.getTracks()) track.stop();
-    recordState = null;
-    reelButton.classList.remove('active');
-    reelButton.disabled = false;
-    reelButton.textContent = original;
-    $('exportBtn').disabled = false;
+    try {
+      step();
+      await stopped;
+    } finally {
+      clearTimeout(timer);
+      window.paperLayer?.setCaptureSize?.(0, 0);
+      window.__tb3d?.endExportCapture?.();
+      if (window.__tb3d && window.__tb3d.releasePhase) window.__tb3d.releasePhase();
+      window.paperLayer?.endCapture();
+      for (const track of stream.getTracks()) track.stop();
+      recordState = null;
+      reelButton.classList.remove('active');
+      reelButton.disabled = false;
+      reelButton.textContent = original;
+      $('exportBtn').disabled = false;
+    }
 
     if (!chunks.length) { alert('The recording produced no frames.'); return; }
     const blob = new Blob(chunks, { type: mime });

@@ -292,6 +292,13 @@ void main(){
 
 let gl3 = null, program3 = null, texture3 = null, uniforms3 = null;
 let canvas3d = null, loop3d = 0, three3d = false;
+/* Set while an export runs, so the pass copies at export resolution. */
+let captureSize = null;
+
+function setCaptureSize(width, height) {
+  captureSize = width > 0 && height > 0 ? { width: Math.round(width), height: Math.round(height) } : null;
+  return captureSize;
+}
 
 function ensure3d() {
   if (canvas3d) return true;
@@ -351,8 +358,10 @@ function draw3d() {
   if (!gl3 || !source || !source.width) return;
   const frame = document.getElementById('fvsFrame');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = Math.max(1, Math.round(frame.clientWidth * dpr));
-  const h = Math.max(1, Math.round(frame.clientHeight * dpr));
+  const w = captureSize ? captureSize.width : Math.max(1, Math.round(frame.clientWidth * dpr));
+  const h = captureSize ? captureSize.height : Math.max(1, Math.round(frame.clientHeight * dpr));
+  /* Keep the pattern at the same physical size when the buffer grows. */
+  const ratio = captureSize ? w / Math.max(1, frame.clientWidth * dpr) : 1;
   if (canvas3d.width !== w || canvas3d.height !== h) { canvas3d.width = w; canvas3d.height = h; }
   gl3.viewport(0, 0, w, h);
   gl3.bindTexture(gl3.TEXTURE_2D, texture3);
@@ -363,7 +372,7 @@ function draw3d() {
   gl3.uniform1i(uniforms3.src, 0);
   gl3.uniform1f(uniforms3.mode, MODE_3D[mode] ?? 0);
   /* Same density curve as the 2D shader, so preview and export agree. */
-  gl3.uniform1f(uniforms3.px, Math.max(1, 2.5 * dpr * scale));
+  gl3.uniform1f(uniforms3.px, Math.max(1, 2.5 * dpr * scale * ratio));
   gl3.uniform2f(uniforms3.res, w, h);
   gl3.drawArrays(gl3.TRIANGLES, 0, 3);
 }
@@ -399,6 +408,7 @@ function set3d(on) {
 window.paperLayer = {
   setMode,
   setScale,
+  setCaptureSize,
   set3d,
   beginCapture,
   phase,

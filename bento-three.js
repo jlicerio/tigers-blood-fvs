@@ -86,7 +86,26 @@ function posterClock(seconds) {
   const step = 1 / posterFps;
   return Math.floor(seconds / step) * step;
 }
-const phaseApi = { setPhase, releasePhase, renderPhaseFrame, setPosterFps };
+/* During an export the renderer runs at the export pixel size, then returns
+   to the preview buffer. The window is always closed by the caller's finally. */
+let exportSize = null, restorePreviewSize = () => {};
+function beginExportCapture(width, height) {
+  if (!renderer || !camera) return false;
+  const w = Math.max(1, Math.round(width)), h = Math.max(1, Math.round(height));
+  exportSize = { width: w, height: h };
+  renderer.setPixelRatio(1);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  return true;
+}
+function endExportCapture() {
+  if (!exportSize) return false;
+  exportSize = null;
+  restorePreviewSize();
+  return true;
+}
+const phaseApi = { setPhase, releasePhase, renderPhaseFrame, setPosterFps, beginExportCapture, endExportCapture };
 const liquidUniforms = {uTime:{value:0},uTwist:{value:0},uCenter:{value:new THREE.Vector3()},uExtent:{value:1}};
 
 function setStatus(message) { status.textContent = message; }
@@ -102,12 +121,16 @@ try {
   camera = new THREE.PerspectiveCamera(35, 1, .1, 100);
   camera.position.set(0, 0, 9);
   const resizePreview = () => {
+    /* Never fight an export for the buffer. */
+    if (exportSize) return;
     const frame = $('fvsFrame'), width = frame.clientWidth, height = frame.clientHeight;
     if (!width || !height) return;
     const aspect = width / height, renderWidth = 512, renderHeight = Math.max(1, Math.round(512 / aspect));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     camera.aspect = aspect; camera.updateProjectionMatrix();
     renderer.setSize(renderWidth, renderHeight, false);
   };
+  restorePreviewSize = resizePreview;
   new ResizeObserver(resizePreview).observe($('fvsFrame'));
   resizePreview();
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
@@ -217,6 +240,10 @@ function makeMaterial() {
   const c1 = hexOr($('flat3d')?.value, '#eceef1');
   const c2 = hexOr($('flat3d2')?.value, '#e11d48');
   let result;
+  if (fill === 'neon') {
+    /* The edges carry the look; this shell only occludes what is behind it. */
+    return new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: .85, side: THREE.DoubleSide });
+  }
   if (fill === 'chrome') {
     /* Iridescence at 0 is polished silver; at 1 it is iridescent chrome. */
     result = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: rough,
@@ -263,6 +290,47 @@ function makeMaterial() {
   return result;
 }
 
+let neonLineMaterial = null, neonCoreMaterial = null;
+function neonColour() { return hexOr($('flat3d')?.value, '#ff1e3c'); }
+
+function clearNeon(root) {
+  root.traverse(object => {
+    if (!object.isMesh) return;
+    for (const child of [...object.children]) {
+      if (!child.isLineSegments) continue;
+      object.remove(child);
+      child.geometry.dispose();
+    }
+  });
+}
+
+/* Neon reads as a hollow tube: a near-black core hides the back faces and the
+   bright unlit rim is what the CSS glow blooms. */
+function paintNeon(root) {
+  if (!neonLineMaterial) neonLineMaterial = new THREE.LineBasicMaterial({ toneMapped: false });
+  neonLineMaterial.color.set(neonColour());
+  neonCoreMaterial?.dispose();
+  neonCoreMaterial = new THREE.MeshBasicMaterial({
+    color: 0x050505, transparent: true, opacity: .85, side: THREE.DoubleSide,
+    /* Push the shell back a hair so its own outline wins the depth test. */
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+  });
+  const meshes = [];
+  root.traverse(object => { if (object.isMesh) meshes.push(object); });
+  for (const mesh of meshes) {
+    mesh.material = neonCoreMaterial;
+    for (const child of [...mesh.children]) {
+      if (!child.isLineSegments) continue;
+      mesh.remove(child);
+      child.geometry.dispose();
+    }
+    const lines = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 18), neonLineMaterial);
+    lines.renderOrder = 2;
+    mesh.add(lines);
+  }
+  return meshes.length;
+}
+
 /* Give every mesh the fill it should show. Multi-colour rebuilds one material
    per ink and walks the meshes in reading order, so the cycle is stable. */
 function paintSurface(root, base) {
@@ -284,6 +352,8 @@ function paintSurface(root, base) {
   } else {
     meshes.forEach(mesh => { mesh.material = base; });
   }
+  if (surfaceFill() === 'neon') paintNeon(root);
+  else clearNeon(root);
   for (const material of previous) material.dispose();
   return meshes.length;
 }
@@ -378,7 +448,12 @@ function shuffleColors(seed) {
 
 function rebuild() {
   if (!paths || !pivot) return;
-  for (const child of [...pivot.children]) { pivot.remove(child); child.traverse(o => { if (o.isMesh) o.geometry.dispose(); }); }
+  for (const child of [...pivot.children]) {
+    pivot.remove(child);
+    child.traverse(o => {
+      if (o.isMesh || o.isLineSegments) o.geometry?.dispose();
+    });
+  }
   material?.dispose(); material = makeMaterial();
   const group = new THREE.Group();
   const mode = $('arrangement3d').value;
@@ -543,6 +618,14 @@ function surfaceApi() {
 /* Object spread copies a getter's value once, so the live surface view is
    defined on the finished object instead of inside the spread. */
 function withSurfaceView(api) {
+  Object.defineProperty(api, 'renderSize', {
+    enumerable: true,
+    get: () => [canvas.width, canvas.height],
+  });
+  Object.defineProperty(api, 'capturing', {
+    enumerable: true,
+    get: () => !!exportSize,
+  });
   Object.defineProperty(api, 'surface', {
     enumerable: true,
     get: () => ({
