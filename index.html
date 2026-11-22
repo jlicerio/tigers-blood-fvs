@@ -635,6 +635,11 @@
               </select>
               <b></b>
             </label>
+            <div class="row" id="neonSwatchesWrap" style="display:none;" role="group" aria-label="Neon lightsaber colour">
+              <button type="button" class="ghost neon-chip" data-neon="#ff1e3c" aria-pressed="true"><span style="display:inline-block;width:8px;height:8px;background:#ff1e3c;margin-right:6px;"></span>Red</button>
+              <button type="button" class="ghost neon-chip" data-neon="#38bdf8" aria-pressed="false"><span style="display:inline-block;width:8px;height:8px;background:#38bdf8;margin-right:6px;"></span>Light Blue</button>
+              <button type="button" class="ghost neon-chip" data-neon="#22c55e" aria-pressed="false"><span style="display:inline-block;width:8px;height:8px;background:#22c55e;margin-right:6px;"></span>Green</button>
+            </div>
             <label class="field">
               <span>Surface texture</span>
               <select id="surfaceTexture" aria-label="Surface texture">
@@ -2114,6 +2119,16 @@
     $('flipPalette').disabled = !isMulti;
     $('shuffleColors').disabled = !isMulti;
     $('videoOpacityWrap').style.display = fill === 'video' ? '' : 'none';
+    const neonWrap = $('neonSwatchesWrap');
+    if (neonWrap) {
+      neonWrap.style.display = fill === 'neon' ? '' : 'none';
+      const cur = ($('flatColor')?.value || '').toLowerCase();
+      neonWrap.querySelectorAll('.neon-chip').forEach((btn) => {
+        const on = (btn.dataset.neon || '').toLowerCase() === cur;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
     $('flipbookGrp').style.display = isRiso ? '' : 'none';
     $('flipFrame').disabled = !isRiso;
     $('flipOrder').disabled = !isRiso;
@@ -2125,6 +2140,18 @@
   $('surfaceFill').addEventListener('change', () => {
     syncSurfaceControls();
     window.__tb3d?.refreshMaterial?.();
+  });
+  document.querySelectorAll('.neon-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const hex = btn.dataset.neon;
+      if (!hex) return;
+      $('flatColor').value = hex;
+      $('flatColor').dispatchEvent(new Event('input'));
+      glowColor.value = hex;
+      glowColor.dispatchEvent(new Event('input'));
+      if (!glowOn) $('glowBtn').click();
+      syncSurfaceControls();
+    });
   });
   $('surfaceTexture').addEventListener('change', () => window.__tb3d?.refreshMaterial?.());
   $('videoOpacity').addEventListener('input', () => {
