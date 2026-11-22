@@ -2123,7 +2123,7 @@
     const neonWrap = $('neonSwatchesWrap');
     if (neonWrap) {
       neonWrap.style.display = fill === 'neon' ? '' : 'none';
-      const cur = ($('flatColor')?.value || '').toLowerCase();
+      const cur = ($('flat3d')?.value || '').toLowerCase();
       neonWrap.querySelectorAll('.neon-chip').forEach((btn) => {
         const on = (btn.dataset.neon || '').toLowerCase() === cur;
         btn.classList.toggle('active', on);
@@ -2146,11 +2146,12 @@
     btn.addEventListener('click', () => {
       const hex = btn.dataset.neon;
       if (!hex) return;
-      $('flatColor').value = hex;
-      $('flatColor').dispatchEvent(new Event('input'));
+      $('flat3d').value = hex;
+      $('flat3d').dispatchEvent(new Event('input', { bubbles: true }));
       glowColor.value = hex;
-      glowColor.dispatchEvent(new Event('input'));
+      glowColor.dispatchEvent(new Event('input', { bubbles: true }));
       if (!glowOn) $('glowBtn').click();
+      window.__tb3d?.refreshMaterial?.();
       syncSurfaceControls();
     });
   });
