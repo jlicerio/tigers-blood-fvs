@@ -684,10 +684,10 @@ function animate(now) {
   const dt=Math.min((now-previous)/1000,.1); previous=now;
   if(active && renderer && pivot) {
     if(!phaseLock) {
-      if(playing) spinSeconds += dt;
+      if(playing) spinSeconds += dt * 0.5;
       const clock = posterClock(spinSeconds);
       angle = (clock * Math.PI * 2 / Math.max(0.1, +$('speed3d').value)) % (Math.PI * 2);
-      liquidUniforms.uTime.value = posterClock(now / 1000);
+      liquidUniforms.uTime.value = posterClock((now / 1000) * 0.5);
     }
     if (risoMode) applyRisoStep();
     applyRotation();
