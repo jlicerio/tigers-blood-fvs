@@ -38,7 +38,7 @@ function applyRotation() {
 function setPhase(tNorm, loops = 1) {
   if (!renderer || !pivot) return false;
   const t = Math.min(0.999999, Math.max(0, Number(tNorm) || 0));
-  const turns = Math.max(1, Math.round(Number(loops) || 1));
+  const turns = Math.max(0.05, Number(loops) || 1);
   if (!phaseLock) playingBeforePhase = playing;
   phaseLock = true;
   playing = false;

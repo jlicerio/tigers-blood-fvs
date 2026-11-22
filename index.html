@@ -2657,10 +2657,12 @@
         }
         const poster = Number($('posterFps').value) || 0;
         const holdStep = poster ? Math.max(1, Math.round(fps / poster)) : 1;
+        const arr = $('arrangement3d').value;
+        const segTurns = arr === 'carousel' ? 0.25 : (arr === 'riso' ? 0.5 : 0.4);
         for (let frame = 0; frame < framesEach; frame++) {
           const held = Math.floor(frame / holdStep) * holdStep;
           const t = Math.min(0.9995, held / framesEach);
-          if (spinOn && window.__tb3d?.setPhase) window.__tb3d.setPhase(t, 1);
+          if (spinOn && window.__tb3d?.setPhase) window.__tb3d.setPhase(t, segTurns);
           if (spinOn) window.__tb3d?.renderPhaseFrame?.();
           window.paperLayer?.phase(t);
           if (spinOn) window.paperLayer?.render3d?.();
