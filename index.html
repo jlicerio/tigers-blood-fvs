@@ -161,6 +161,10 @@
     position: absolute; inset: 0; width: 100%; height: 100%;
     z-index: 20; pointer-events: none; display: none;
   }
+  #postCanvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 30; pointer-events: none; display: none;
+  }
   #newsprintCanvas {
     position: absolute; inset: 0; width: 100%; height: 100%;
     z-index: 2; pointer-events: none; display: none;
@@ -428,6 +432,7 @@
           <canvas id="threeCanvas" aria-label="Interactive 3D logo preview"></canvas>
           <canvas id="noiseCanvas" class="noise-canvas" aria-hidden="true"></canvas>
           <canvas id="paperCanvas" aria-hidden="true"></canvas>
+          <canvas id="postCanvas" aria-hidden="true"></canvas>
           <div id="crtOverlay" class="crt-overlay" aria-hidden="true"></div>
         </div>
       </div>
@@ -873,6 +878,64 @@
               <b id="shaderSizeVal">100%</b>
             </div>
             <p class="note" id="shaderStatus">WebGL shaders run on the logo itself and bake into PNG and MP4.</p>
+          </div>
+
+          <div class="grp">
+            <div class="grp__label">NTSC / CRT</div>
+            <div class="row">
+              <button id="postBtn" class="tg ghost" type="button" aria-pressed="false"><span class="tg__label">Analog post</span><span class="tg__state">OFF</span></button>
+            </div>
+            <label class="field">
+              <span>Preset</span>
+              <select id="postPreset" aria-label="Analog post preset" disabled>
+                <option value="clean">Clean CRT</option>
+                <option value="used">Used VHS</option>
+                <option value="moldy">Moldy Rental Tape</option>
+                <option value="glitchy">Glitchy Broadcast</option>
+              </select>
+              <b></b>
+            </label>
+            <div class="field">
+              <span>Chroma bleed</span>
+              <input id="postChroma" type="range" min="0" max="100" value="35" aria-label="Chroma bleed" disabled />
+              <b id="postChromaVal">35%</b>
+            </div>
+            <div class="field">
+              <span>Tracking</span>
+              <input id="postTracking" type="range" min="0" max="100" value="10" aria-label="Tracking" disabled />
+              <b id="postTrackingVal">10%</b>
+            </div>
+            <div class="field">
+              <span>Tape noise</span>
+              <input id="postNoise" type="range" min="0" max="100" value="12" aria-label="Tape noise" disabled />
+              <b id="postNoiseVal">12%</b>
+            </div>
+            <div class="field">
+              <span>TV glitch</span>
+              <input id="postGlitch" type="range" min="0" max="100" value="4" aria-label="TV glitch" disabled />
+              <b id="postGlitchVal">4%</b>
+            </div>
+            <div class="field">
+              <span>Scanlines</span>
+              <input id="postScan" type="range" min="0" max="100" value="34" aria-label="Scanlines" disabled />
+              <b id="postScanVal">34%</b>
+            </div>
+            <div class="field">
+              <span>Phosphor mask</span>
+              <input id="postMask" type="range" min="0" max="100" value="18" aria-label="Phosphor mask" disabled />
+              <b id="postMaskVal">18%</b>
+            </div>
+            <div class="field">
+              <span>Bloom</span>
+              <input id="postBloom" type="range" min="0" max="100" value="35" aria-label="Bloom" disabled />
+              <b id="postBloomVal">35%</b>
+            </div>
+            <div class="field">
+              <span>Curvature</span>
+              <input id="postCurve" type="range" min="0" max="100" value="16" aria-label="Curvature" disabled />
+              <b id="postCurveVal">16%</b>
+            </div>
+            <p class="note">NTSC / VHS → TV glitch → CRT over the whole frame. Runs in the preview and in PNG / MP4.</p>
           </div>
 
           <div class="grp">
@@ -1396,6 +1459,9 @@
       shaderSize: Number($('shaderSize').value),
       invertMark,
       print: printMode,
+      ntscrt: post.enabled,
+      ntscrtPreset: post.preset,
+      ntscrtParams: { ...postParams() },
     };
   }
 
@@ -1513,7 +1579,7 @@
     if (has('glow')) { ensureGlow(!!cfg.glow); applied.push('glow'); }
     if (has('xerox')) { ensureXerox(!!cfg.xerox); applied.push('xerox'); }
     if (has('newsprintGrid')) { if (gridOn !== !!cfg.newsprintGrid) $('gridBtn').click(); applied.push('newsprintGrid'); }
-    if (has('crt')) { ensureCrt(!!cfg.crt); applied.push('crt'); }
+    if (has('crt')) { ensureCrt(!post.enabled && !!cfg.crt); applied.push('crt'); }
     if (has('invertMark')) {
       if (invertMark !== !!cfg.invertMark) $('invertBtn').click();
       applied.push('invertMark');
@@ -1521,6 +1587,28 @@
     if (has('print')) {
       const mode = ['off', 'dither', 'halftone'].includes(cfg.print) ? cfg.print : 'off';
       setPrint(mode); applied.push('print');
+    }
+    if (has('ntscrt') || has('ntscrtPreset') || has('ntscrtParams')) {
+      if (has('ntscrtPreset') && window.TbPost?.POST_PRESETS?.[cfg.ntscrtPreset]) {
+        post.preset = cfg.ntscrtPreset;
+        post.params = { ...window.TbPost.POST_PRESETS[cfg.ntscrtPreset].params };
+      }
+      if (cfg.ntscrtParams && typeof cfg.ntscrtParams === 'object') {
+        const base = post.params || window.TbPost?.POST_DEFAULTS || {};
+        const next = { ...base };
+        for (const control of window.TbPost?.POST_CONTROLS || []) {
+          const raw = Number(cfg.ntscrtParams[control.key]);
+          next[control.key] = Number.isFinite(raw)
+            ? Math.min(control.max, Math.max(control.min, raw))
+            : (base[control.key] ?? control.default);
+        }
+        post.params = next;
+      }
+      if (has('ntscrt') && !!cfg.ntscrt !== post.enabled) togglePost();
+      /* The post and the CSS CRT are exclusive; re-assert after the toggle. */
+      if (has('crt')) ensureCrt(!post.enabled && !!cfg.crt);
+      syncPostUI();
+      applied.push('ntscrt');
     }
     applyShaders();
     repaintBg();
@@ -1752,10 +1840,9 @@
   });
 
   $("crtBtn").addEventListener("click", () => {
-    crtOn = !crtOn;
-    crtOverlay.style.display = crtOn ? "block" : "none";
-    setToggle($("crtBtn"), crtOn);
-    applyShaders();
+    /* One CRT owner: turning the CSS tube on clears the analog post first. */
+    if (!crtOn && post.enabled) togglePost();
+    setCrtState(!crtOn);
   });
 
   /* ---- media ------------------------------------------------------------ */
@@ -2124,6 +2211,132 @@
     $('shaderSizeVal').textContent = shaderSize.value + '%';
     window.paperLayer?.setScale(Number(shaderSize.value) / 100);
   });
+
+  /* ---- analog post (NTSC / VHS → glitch → CRT) --------------------------- */
+  /* One owner for the post state; tb-post.js owns defaults, ranges and presets. */
+  const post = { enabled: false, preset: 'clean', params: null, pipeline: null, scratch: null };
+  const POST_SLIDER_IDS = {
+    chroma: 'postChroma', tracking: 'postTracking', noise: 'postNoise', glitch: 'postGlitch',
+    scan: 'postScan', mask: 'postMask', bloom: 'postBloom', curve: 'postCurve',
+  };
+
+  let postSavedCrt = false;
+  function setCrtState(on) {
+    crtOn = on;
+    crtOverlay.style.display = on ? 'block' : 'none';
+    setToggle($('crtBtn'), on);
+    applyShaders();
+  }
+
+  const postParams = () => {
+    if (!post.params && window.TbPost) post.params = { ...window.TbPost.POST_PRESETS.clean.params };
+    return post.params || {};
+  };
+
+  function syncPostUI() {
+    const on = post.enabled;
+    $('postPreset').disabled = !on;
+    for (const [key, id] of Object.entries(POST_SLIDER_IDS)) {
+      const input = $(id);
+      input.disabled = !on;
+      input.value = String(Math.round((postParams()[key] ?? 0) * 100));
+      $(id + 'Val').textContent = input.value + '%';
+    }
+    $('postPreset').value = post.preset;
+  }
+
+  function ensurePost() {
+    if (!window.TbPost) return null;
+    if (!post.params) post.params = { ...window.TbPost.POST_PRESETS.clean.params };
+    if (!post.pipeline) post.pipeline = new window.TbPost.TbPost($('postCanvas'));
+    return post.pipeline;
+  }
+
+  function applyPostPreset(name) {
+    const entry = window.TbPost?.POST_PRESETS?.[name];
+    if (!entry) return;
+    post.preset = name;
+    post.params = { ...entry.params };
+    syncPostUI();
+  }
+
+  function togglePost() {
+    if (!post.enabled) {
+      if (!ensurePost()) {
+        $('shaderStatus').textContent = 'The analog post is still loading. Try again in a moment.';
+        return;
+      }
+      postSavedCrt = crtOn;
+      if (crtOn) setCrtState(false);
+      post.enabled = true;
+      $('postCanvas').style.display = 'block';
+      crtOverlay.style.display = 'none';
+    } else {
+      post.enabled = false;
+      $('postCanvas').style.display = 'none';
+      /* Give the user's CRT choice back when the post steps aside. */
+      if (postSavedCrt) setCrtState(true);
+      postSavedCrt = false;
+    }
+    setToggle($('postBtn'), post.enabled);
+    syncPostUI();
+  }
+
+  $('postBtn').addEventListener('click', togglePost);
+  $('postPreset').addEventListener('change', () => applyPostPreset($('postPreset').value));
+  for (const [key, id] of Object.entries(POST_SLIDER_IDS)) {
+    $(id).addEventListener('input', () => {
+      postParams()[key] = Number($(id).value) / 100;
+      $(id + 'Val').textContent = $(id).value + '%';
+    });
+  }
+  window.addEventListener('tb-post-ready', () => {
+    if (!post.params) {
+      post.params = { ...window.TbPost.POST_PRESETS.clean.params };
+      syncPostUI();
+    }
+  });
+  syncPostUI();
+
+  function postScratch(w, h) {
+    if (!post.scratch) post.scratch = document.createElement('canvas');
+    if (post.scratch.width !== w || post.scratch.height !== h) {
+      post.scratch.width = w;
+      post.scratch.height = h;
+    }
+    return post.scratch;
+  }
+
+  /* Compose the normal frame, then run the analog chain over it. */
+  function renderPostTo(w, h, time, opts = {}) {
+    const pipeline = ensurePost();
+    if (!pipeline) return false;
+    const scratch = postScratch(w, h);
+    const c = scratch.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, w, h);
+    /* Match the caller: a PNG without print must not gain it through the post. */
+    drawFrame(c, w, h, { print: !!opts.print, crt: false });
+    pipeline.render(scratch, w, h, time, postParams());
+    return true;
+  }
+
+  /* One entry for stills and video: post when on, plain frame when off. */
+  function composeFrame(ctx, w, h, opts = {}) {
+    if (!post.enabled) { drawFrame(ctx, w, h, opts); return; }
+    if (!renderPostTo(w, h, opts.time ?? performance.now() / 1000, opts)) { drawFrame(ctx, w, h, opts); return; }
+    ctx.drawImage($('postCanvas'), 0, 0, w, h);
+  }
+
+  (function postLoop(now) {
+    requestAnimationFrame(postLoop);
+    /* The exporter owns the canvas while a reel records. */
+    if (!post.enabled || recordState) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(frame.clientWidth * dpr), h = Math.round(frame.clientHeight * dpr);
+    if (!w || !h) return;
+    renderPostTo(w, h, (now || performance.now()) / 1000, { print: true });
+  })(performance.now());
   $('inkBleed').addEventListener('input', applyInkBleed);
 
   /* Surface fill and texture apply to every arrangement, so the colour set
@@ -2407,7 +2620,7 @@
         window.__tb3d?.renderPhaseFrame?.();
         window.paperLayer?.render3d?.();
       }
-      drawFrame(ctx, w, h);
+      composeFrame(ctx, w, h);
     } finally {
       window.paperLayer?.setCaptureSize?.(0, 0);
       if (spinOn) window.__tb3d?.endExportCapture?.();
@@ -2417,6 +2630,36 @@
     a.href = canvas.toDataURL("image/png");
     a.click();
   });
+
+  /* Encode explicit timestamps: rendering time must not stretch the movie. */
+  const fpsForReel = () => 30;
+  async function makeReelEncoder(canvas, fps) {
+    const { Muxer, ArrayBufferTarget } = await import('./mp4-muxer.mjs');
+    const { width, height } = canvas;
+    const config = { codec: 'avc1.640028', width, height, bitrate: REEL_BITRATE, framerate: fps, avc: { format: 'avc' } };
+    if (typeof VideoEncoder === 'undefined' || !(await VideoEncoder.isConfigSupported(config)).supported) throw new Error('H.264 WebCodecs is not available in this browser.');
+    const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: 'avc', width, height }, fastStart: 'in-memory' });
+    let failure = null;
+    const encoder = new VideoEncoder({ output: (chunk, meta) => { try { muxer.addVideoChunk(chunk, meta); } catch (error) { failure = error; } }, error: e => { failure = e; } });
+    try { encoder.configure(config); } catch (error) { encoder.close(); throw error; }
+    return {
+      async add(index) {
+        if (failure) throw failure;
+        const timestamp = Math.round(index * 1000000 / fps);
+        const next = Math.round((index + 1) * 1000000 / fps);
+        const frame = new VideoFrame(canvas, { timestamp, duration: next - timestamp });
+        try { encoder.encode(frame, { keyFrame: index % fps === 0 }); } finally { frame.close(); }
+        const deadline = performance.now() + 60000;
+        while (encoder.encodeQueueSize > 6) { if (failure) throw failure; if (performance.now() > deadline) throw new Error('Video encoder stalled.'); await new Promise(r => setTimeout(r, 4)); }
+      },
+      async finish() { await encoder.flush(); if (failure) throw failure; muxer.finalize(); return new Blob([muxer.target.buffer], { type: 'video/mp4' }); },
+      close() { if (encoder.state !== 'closed') encoder.close(); }
+    };
+  }
+  function downloadReel(blob, name) {
+    const a = document.createElement('a'); a.download = name; a.href = URL.createObjectURL(blob); a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  }
 
   /* ---- MP4 reel --------------------------------------------------------- */
   const REEL_SIZES = [[280, 350, 864, 1080], [225, 400, 720, 1280], [420, 236, 1280, 720], [260, 336, 864, 1118]];
@@ -2430,8 +2673,7 @@
   let recordState = null;
 
   function reelMime() {
-    if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
-    return REEL_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+    return typeof VideoEncoder === 'undefined' ? '' : 'video/mp4';
   }
   function reelSize() {
     const fw = parseInt(frame.style.width), fh = parseInt(frame.style.height);
@@ -2446,7 +2688,7 @@
     const mp4 = mime.startsWith('video/mp4');
     return {
       label: mp4 ? 'Export MP4' : 'Export WebM',
-      title: mp4 ? 'Record one spin loop as MP4 (H.264). Real-time capture.'
+      title: mp4 ? 'Render one spin loop as MP4 (H.264).'
         : 'This browser cannot record MP4. Recording WebM instead.',
     };
   }
@@ -2483,9 +2725,6 @@
     if (recordState) return;
     const mime = reelMime();
     if (!mime) { alert('This browser cannot record video from a canvas.'); return; }
-    if (typeof MediaRecorder === 'undefined' || typeof HTMLCanvasElement.prototype.captureStream !== 'function') {
-      alert('This browser cannot capture a canvas stream.'); return;
-    }
     const { width, height } = reelSize();
     const seconds = Math.min(15, Math.max(2, Number($('reelLength').value) || 6));
     const spinSeconds = Math.max(2, Number($('speed3d').value) || 6);
@@ -2495,96 +2734,40 @@
     canvas.width = width; canvas.height = height;
     const ctx = canvas.getContext('2d', { alpha: false });
 
-    let stream, recorder, track = null;
-    try {
-      /* Manual frame pacing: captureStream(0) + requestFrame() pushes one frame
-         per composite, so the file never inherits the display refresh rate. */
-      /* Manual frame pacing: captureStream(0) + requestFrame() pushes one frame
-         per composite, so the file never inherits the display refresh rate. */
-      stream = canvas.captureStream(0);
-      track = stream.getVideoTracks()[0] || null;
-      if (!track || typeof track.requestFrame !== 'function') {
-        stream = canvas.captureStream(30);
-        track = null;
-      }
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: REEL_BITRATE });
-    } catch (error) {
-      alert('This browser refused the recording format: ' + (error && error.message ? error.message : 'unknown error'));
-      return;
-    }
-
-    const chunks = [];
-    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise((resolve) => { recorder.onstop = () => resolve(); });
     const original = reelButton.textContent;
     recordState = { seconds };
-    reelButton.classList.add('active');
-    reelButton.disabled = true;
-    $('exportBtn').disabled = true;
-    allBtn.disabled = true;
-
-    recorder.start(250);
-    /* The 3D canvas matches the export pixels, so nothing is upscaled. */
-    if (spinOn) window.__tb3d?.beginExportCapture?.(width, height);
-    window.paperLayer?.setCaptureSize?.(width, height);
-    window.paperLayer?.beginCapture();
-    const fps = 30;
-    const totalFrames = Math.max(1, Math.round(seconds * fps));
-    let frameIndex = 0;
-    let stopping = false;
-    const step = () => {
-      const poster = Number($('posterFps').value) || 0;
-      const holdStep = poster ? Math.max(1, Math.round(fps / poster)) : 1;
-      const held = Math.floor(frameIndex / holdStep) * holdStep;
-      const tNorm = Math.min(0.9995, held / totalFrames);
-      if (spinOn && window.__tb3d && window.__tb3d.setPhase) {
-        window.__tb3d.setPhase(tNorm, loops);
-      }
-      /* Draw the locked phase before anything copies the canvas, so every
-         rotation mode and every flipbook step is exact. */
-      if (spinOn) window.__tb3d?.renderPhaseFrame?.();
-      window.paperLayer?.phase(tNorm);
-      if (spinOn) window.paperLayer?.render3d?.();
-      drawFrame(ctx, width, height, { print: true, crt: true });
-      if (track) track.requestFrame();
-      frameIndex++;
-      reelButton.textContent = `REC ${Math.min(frameIndex, totalFrames)} / ${totalFrames}`;
-      if (frameIndex >= totalFrames) {
-        if (!stopping) {
-          stopping = true;
-          window.setTimeout(() => { try { recorder.stop(); } catch (_) { /* already stopped */ } }, 220);
-        }
-        return;
-      }
-      timer = window.setTimeout(step, 1000 / fps);
-    };
-
+    reelButton.disabled = true; $('exportBtn').disabled = true; allBtn.disabled = true;
+    let encoder;
     try {
-      step();
-      await stopped;
+      encoder = await makeReelEncoder(canvas, fpsForReel());
+      if (spinOn) window.__tb3d?.beginExportCapture?.(width, height);
+      window.paperLayer?.setCaptureSize?.(width, height);
+      window.paperLayer?.beginCapture();
+      const fps = fpsForReel(), totalFrames = Math.round(seconds * fps);
+      for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+        const poster = Number($('posterFps').value) || 0;
+        const holdStep = poster ? Math.max(1, Math.round(fps / poster)) : 1;
+        const tNorm = Math.min(0.9995, Math.floor(frameIndex / holdStep) * holdStep / totalFrames);
+        if (spinOn) { window.__tb3d?.setPhase?.(tNorm, loops); window.__tb3d?.renderPhaseFrame?.(); }
+        window.paperLayer?.phase(tNorm);
+        if (spinOn) window.paperLayer?.render3d?.();
+        composeFrame(ctx, width, height, { print: true, crt: true, time: frameIndex / fps });
+        await encoder.add(frameIndex);
+        reelButton.textContent = `RENDER ${frameIndex + 1} / ${totalFrames}`;
+      }
+      downloadReel(await encoder.finish(), 'tigersblood-reel.mp4');
+    } catch (error) {
+      alert('Video export failed: ' + (error?.message || error));
     } finally {
-      clearTimeout(timer);
+      encoder?.close();
       window.paperLayer?.setCaptureSize?.(0, 0);
       window.__tb3d?.endExportCapture?.();
-      if (window.__tb3d && window.__tb3d.releasePhase) window.__tb3d.releasePhase();
+      window.__tb3d?.releasePhase?.();
       window.paperLayer?.endCapture();
-      for (const track of stream.getTracks()) track.stop();
       recordState = null;
-      reelButton.classList.remove('active');
-      reelButton.disabled = false;
-      reelButton.textContent = original;
-      $('exportBtn').disabled = false;
-      allBtn.disabled = false;
+      reelButton.disabled = false; reelButton.textContent = original;
+      $('exportBtn').disabled = false; allBtn.disabled = false;
     }
-
-    if (!chunks.length) { alert('The recording produced no frames.'); return; }
-    const blob = new Blob(chunks, { type: mime });
-    const isMp4 = mime.startsWith('video/mp4');
-    const a = document.createElement('a');
-    a.download = `tigersblood-reel.${isMp4 ? 'mp4' : 'webm'}`;
-    a.href = URL.createObjectURL(blob);
-    a.click();
-    window.setTimeout(() => URL.revokeObjectURL(a.href), 30000);
   });
 
 
@@ -2619,11 +2802,15 @@
     const savedCfg = getConfig();
     const savedVideoSrc = bgVid.getAttribute('src');
     const hadVideo = bgVid.style.display !== 'none' && !!savedVideoSrc;
+    const savedImageSrc = bgImg.getAttribute('src');
+    const hadImage = bgImg.style.display !== 'none' && !!savedImageSrc;
+    const savedVideoTime = bgVid.currentTime;
+    const videoWasPaused = bgVid.paused;
+    const activePreset = document.querySelector('[data-preset].active');
     const originalLabel = allBtn.textContent;
     const secondsEach = 2.5, fps = 30;
     const framesEach = Math.max(1, Math.round(secondsEach * fps));
-    let canvas, ctx, stream = null, recorder = null, track = null;
-    const chunks = [];
+    let canvas, ctx, encoder = null;
     recordState = { seconds: secondsEach * ALL_PRESETS.length };
     allBtn.disabled = true;
     allBtn.classList.add('active');
@@ -2637,13 +2824,7 @@
       canvas = document.createElement('canvas');
       canvas.width = width; canvas.height = height;
       ctx = canvas.getContext('2d', { alpha: false });
-      stream = canvas.captureStream(0);
-      track = stream.getVideoTracks()[0] || null;
-      if (!track || typeof track.requestFrame !== 'function') { stream = canvas.captureStream(30); track = null; }
-      recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: REEL_BITRATE });
-      recorder.ondataavailable = (event) => { if (event.data && event.data.size) chunks.push(event.data); };
-      const stopped = new Promise((resolve) => { recorder.onstop = () => resolve(); });
-      recorder.start(250);
+      encoder = await makeReelEncoder(canvas, fps);
       if (spinOn) window.__tb3d?.beginExportCapture?.(width, height);
       window.paperLayer?.setCaptureSize?.(width, height);
       window.paperLayer?.beginCapture();
@@ -2666,21 +2847,12 @@
           if (spinOn) window.__tb3d?.renderPhaseFrame?.();
           window.paperLayer?.phase(t);
           if (spinOn) window.paperLayer?.render3d?.();
-          drawFrame(ctx, width, height, { print: true, crt: true });
-          if (track) track.requestFrame();
-          await new Promise((resolve) => setTimeout(resolve, 1000 / fps));
+          composeFrame(ctx, width, height, { print: true, crt: true, time: (index * framesEach + frame) / fps });
+          await encoder.add(index * framesEach + frame);
         }
       }
 
-      recorder.stop();
-      await stopped;
-      if (!chunks.length) { alert('The stitched recording produced no frames.'); return; }
-      const blob = new Blob(chunks, { type: mime });
-      const a = document.createElement('a');
-      a.download = `tigersblood-all-6-reel.${mime.startsWith('video/mp4') ? 'mp4' : 'webm'}`;
-      a.href = URL.createObjectURL(blob);
-      a.click();
-      window.setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+      downloadReel(await encoder.finish(), 'tigersblood-all-6-reel.mp4');
     } catch (error) {
       alert('Export All 6 failed: ' + (error && error.message ? error.message : 'unknown error'));
     } finally {
@@ -2688,13 +2860,19 @@
       window.__tb3d?.endExportCapture?.();
       window.__tb3d?.releasePhase?.();
       window.paperLayer?.endCapture();
-      if (stream) for (const part of stream.getTracks()) part.stop();
+      encoder?.close();
       /* Put the workspace back exactly as it was found. */
       try { applyConfig(savedCfg); } catch (error) { console.warn('Could not restore the previous config', error); }
+      if (activePreset) setPresetActive(activePreset);
+      else document.querySelectorAll('[data-preset]').forEach(button => button.classList.remove('active'));
       if (hadVideo) {
         bgVid.src = savedVideoSrc;
+        bgImg.style.display = 'none';
         bgVid.style.display = 'block';
-        bgVid.play().catch(() => {});
+        bgVid.addEventListener('loadedmetadata', () => { bgVid.currentTime = Math.min(savedVideoTime, bgVid.duration || savedVideoTime); if (!videoWasPaused) bgVid.play().catch(() => {}); }, { once: true });
+      } else if (hadImage) {
+        bgVid.pause(); bgVid.style.display = 'none';
+        bgImg.src = savedImageSrc; bgImg.style.display = 'block';
       } else {
         $('clearBgBtn').click();
       }
@@ -2747,6 +2925,7 @@
 </script>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.186.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.186.1/examples/jsm/","@paper-design/shaders":"https://unpkg.com/@paper-design/shaders@0.0.82/dist/index.js"}}</script>
 <script type="module" src="./paper-layer.js"></script>
+<script type="module" src="./tb-post.js"></script>
 <script type="module" src="./bento-three.js"></script>
 </body>
 </html>
